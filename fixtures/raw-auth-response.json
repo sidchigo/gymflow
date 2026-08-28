@@ -1,0 +1,46 @@
+{
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.fake_test_signature",
+    "role": "MEMBER",
+    "available_roles": [
+        "MEMBER"
+    ],
+    "user_id": "user-123e4567-e89b-12d3-a456-426614174000",
+    "passkey_registration": {
+        "challenge": "mEG0__rxugjVgpu_wJXh5-X2D-15NWBZmMmWQZ_IqAs",
+        "rp": {
+            "name": "Cooper Fitness",
+            "id": "gymwebapp.thecooperfitness.com"
+        },
+        "user": {
+            "id": "user-123e4567-e89b-12d3-a456-426614174000",
+            "name": "user@test.com",
+            "displayName": "John Doe"
+        },
+        "pubKeyCredParams": [
+            {
+                "type": "public-key",
+                "alg": -7
+            },
+            {
+                "type": "public-key",
+                "alg": -257
+            }
+        ],
+        "timeout": 60000,
+        "attestation": "none",
+        "authenticatorSelection": {
+            "residentKey": "preferred",
+            "userVerification": "preferred"
+        },
+        "excludeCredentials": [
+            {
+                "type": "public-key",
+                "id": "gyuqwgf6s7215re56e"
+            },
+            {
+                "type": "public-key",
+                "id": "jhwgedyuwegkdykudg7665726hsu72yhg2yus"
+            }
+        ]
+    }
+}

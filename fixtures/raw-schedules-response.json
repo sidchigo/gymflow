@@ -1,0 +1,62 @@
+[
+    {
+        "id": "mock-uuid-1234",
+        "scheduled_date": "2026-08-29",
+        "time_from": "09:00:00",
+        "time_to": "09:50:00",
+        "capacity": 20,
+        "available_slots": 20,
+        "status": "ACTIVE",
+        "is_active": true,
+        "created_at": "2026-08-23T12:32:31.100000",
+        "class_name": "Boxing Conditioning",
+        "class_description": "",
+        "normal_variants": "SIGNATURE",
+        "coach_name": "Izuku Midoriya"
+    },
+    {
+        "id": "mock-uuid-3456",
+        "scheduled_date": "2026-08-30",
+        "time_from": "18:00:00",
+        "time_to": "18:50:00",
+        "capacity": 20,
+        "available_slots": 20,
+        "status": "ACTIVE",
+        "is_active": true,
+        "created_at": "2026-08-23T12:32:31.257000",
+        "class_name": "Boxing Conditioning",
+        "class_description": "",
+        "normal_variants": "SIGNATURE",
+        "coach_name": "Hinata Hyuga"
+    },
+    {
+        "id": "mock-uuid-7890",
+        "scheduled_date": "2026-08-28",
+        "time_from": "20:00:00",
+        "time_to": "20:50:00",
+        "capacity": 20,
+        "available_slots": 19,
+        "status": "ACTIVE",
+        "is_active": true,
+        "created_at": "2026-08-23T12:32:21.603000",
+        "class_name": "TRX",
+        "class_description": "just for testing",
+        "normal_variants": "GROUP_X",
+        "coach_name": "Eren Jaeger"
+    },
+    {
+        "id": "mock-uuid-1123",
+        "scheduled_date": "2026-08-29",
+        "time_from": "08:00:00",
+        "time_to": "08:50:00",
+        "capacity": 20,
+        "available_slots": 19,
+        "status": "ACTIVE",
+        "is_active": true,
+        "created_at": "2026-08-23T12:32:26.930000",
+        "class_name": "BJJ SKILLS - Development",
+        "class_description": "",
+        "normal_variants": null,
+        "coach_name": "Levi Ackermann"
+    }
+]
