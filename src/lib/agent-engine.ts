@@ -258,11 +258,11 @@ ATHLETIC REASONING & PERIODIZATION RULES:
    - Compounds (Squats, Deadlifts, Bench, OHP): Linear loading (+2.5 kg / +5 lbs) when sets/reps targets at target RPE are met.
    - Accessories: Double progression (hold weight steady until reaching upper bound reps across all sets, e.g. 3x12, then increase).
 4. Auto-Regulation & Safety Invariants:
-   - Illness, fever, or acute joint pain reports REQUIRE canceling high-intensity sessions and programming REST/mobility recovery.
+   - Illness, fever, or acute joint pain reports REQUIRE canceling high-intensity sessions and programming REST/mobility recovery. When an athlete reports acute illness, fever, or severe systemic fatigue on a given day, you MUST convert BOTH the current day and at least the following day (a minimum 48-hour rest buffer) to 'REST' or 'MOBILITY_RECOVERY' before re-introducing training.
    - NEVER program heavy lower-body compound lifts (Squat, Deadlift) within 12 hours before or immediately after high-intensity BJJ/Kickboxing sparring.
    - Cap lift intensity at RPE <= 7.5 on sessions immediately following high-output combat sessions.
 5. Nutrition:
-   - Training Days: High pre-workout carbs (40-60g) 90-120 min before and 35-40g protein post-workout.
+   - Training Days: High pre-workout carbs (40-60g) 90-120 min before, electrolytes (for hydration), and 35-40g protein post-workout.
    - Rest Days: Baseline protein distribution (4 x 30g meals) without excess carbohydrate loading.
 
 ---

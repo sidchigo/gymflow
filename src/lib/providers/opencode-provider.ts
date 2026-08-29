@@ -40,6 +40,24 @@ export class OpenCodeZenProvider implements LLMProvider {
     for (let i = 0; i < params.messages.length; i++) {
       const m = params.messages[i];
       if (!m) continue;
+
+      // Extract function responses first (since host engine might append them under "user" role)
+      const funcParts = m.parts.filter((p) => p.functionResponse);
+      if (funcParts.length > 0) {
+        for (const p of funcParts) {
+          if (p.functionResponse) {
+            const fr = p.functionResponse;
+            const callId = callIdMap.get(fr.name) || `call_fallback_${fr.name}`;
+            openAIMessages.push({
+              role: "tool",
+              tool_call_id: callId,
+              content: JSON.stringify(fr.response),
+            });
+          }
+        }
+        continue;
+      }
+
       if (m.role === "system") {
         const text = m.parts.map((p) => p.text).filter(Boolean).join("\n");
         openAIMessages.push({ role: "system", content: text });
@@ -70,18 +88,6 @@ export class OpenCodeZenProvider implements LLMProvider {
           });
         }
         openAIMessages.push(assistantMsg);
-      } else if (m.role === "function") {
-        for (const p of m.parts) {
-          if (p.functionResponse) {
-            const fr = p.functionResponse;
-            const callId = callIdMap.get(fr.name) || `call_fallback_${fr.name}`;
-            openAIMessages.push({
-              role: "tool",
-              tool_call_id: callId,
-              content: JSON.stringify(fr.response),
-            });
-          }
-        }
       }
     }
 

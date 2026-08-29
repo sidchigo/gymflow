@@ -257,8 +257,8 @@ describe("GymFlow Agent Scenarios Evaluation Suite", { concurrent: false }, () =
 
         // Assertion 2: planRules checking
         if (assertions.planRules && assertions.planRules.length > 0) {
-          // Locate the replan_week_schedule call argument "plan"
-          const replanCall = executedCalls.find((c) => c.name === "replan_week_schedule");
+          const replanCalls = executedCalls.filter((c) => c.name === "replan_week_schedule");
+          const replanCall = replanCalls[replanCalls.length - 1];
           if (!replanCall) {
             scenarioResult.passed = false;
             scenarioResult.errors.push("Cannot evaluate planRules: 'replan_week_schedule' tool call not found");
