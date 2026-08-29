@@ -25,7 +25,7 @@ const ALL_MODALITIES: Modality[] = [
   "MOBILITY_RECOVERY",
 ];
 
-const DAYS_OF_WEEK = [
+const ALL_DAYS = [
   "Monday",
   "Tuesday",
   "Wednesday",
@@ -33,6 +33,14 @@ const DAYS_OF_WEEK = [
   "Friday",
   "Saturday",
   "Sunday",
+] as const;
+
+const DAYS_OF_WEEK = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
 ] as const;
 
 export default function ProfileSettingsDialog({
@@ -53,11 +61,16 @@ export default function ProfileSettingsDialog({
   // Initialize weekly work schedule
   const [schedule, setSchedule] = useState(() => {
     const defaultSchedule: Record<string, { mode: "WFH" | "WFO"; commuteMinutesOneWay: number }> = {};
-    DAYS_OF_WEEK.forEach((day) => {
+    ALL_DAYS.forEach((day) => {
+      // For Saturday/Sunday, default to WFH with 0 commute if not already set
+      const isWeekend = day === "Saturday" || day === "Sunday";
       defaultSchedule[day] = initialProfile?.weeklyWorkSchedule[day] ?? {
         mode: "WFH",
         commuteMinutesOneWay: 0,
       };
+      if (isWeekend && !initialProfile?.weeklyWorkSchedule[day]) {
+        defaultSchedule[day] = { mode: "WFH", commuteMinutesOneWay: 0 };
+      }
     });
     return defaultSchedule;
   });
@@ -118,6 +131,17 @@ export default function ProfileSettingsDialog({
         },
       };
     });
+  };
+
+  const handleLogout = async () => {
+    try {
+      const res = await fetch("/api/auth/logout", { method: "POST" });
+      if (res.ok) {
+        window.location.href = "/login";
+      }
+    } catch (err) {
+      console.error("Logout failed:", err);
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -324,18 +348,16 @@ export default function ProfileSettingsDialog({
                       </button>
 
                       {/* Commute time */}
-                      {isWFO && (
-                        <div className="flex items-center gap-1.5 rounded-lg border border-zinc-850 bg-zinc-900/50 px-2 py-1">
-                          <Clock size={11} className="text-zinc-500" />
-                          <input
-                            type="number"
-                            value={item.commuteMinutesOneWay}
-                            onChange={(e) => handleCommuteChange(day, parseInt(e.target.value) || 0)}
-                            className="w-10 bg-transparent text-center text-xs font-bold text-zinc-350 outline-none"
-                          />
-                          <span className="text-[10px] text-zinc-500 font-semibold">m</span>
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1.5 rounded-lg border border-zinc-850 bg-zinc-900/50 px-2 py-1">
+                        <Clock size={11} className="text-zinc-500" />
+                        <input
+                          type="number"
+                          value={item.commuteMinutesOneWay}
+                          onChange={(e) => handleCommuteChange(day, parseInt(e.target.value) || 0)}
+                          className="w-10 bg-transparent text-center text-xs font-bold text-zinc-350 outline-none"
+                        />
+                        <span className="text-[10px] text-zinc-500 font-semibold">m</span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -375,11 +397,18 @@ export default function ProfileSettingsDialog({
           </div>
 
           {/* Action Trigger */}
-          <div className="shrink-0 border-t border-zinc-900 pt-4 mt-6">
+          <div className="shrink-0 border-t border-zinc-900 pt-4 mt-6 flex gap-3">
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="flex-1 rounded-xl border border-red-500/20 bg-red-950/20 py-3 text-sm font-bold text-red-400 transition-all hover:bg-red-950/40 active:scale-98"
+            >
+              Log Out
+            </button>
             <button
               type="submit"
               disabled={saving}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-zinc-100 py-3 text-sm font-bold text-zinc-950 transition-all hover:bg-zinc-200 active:scale-98 disabled:opacity-50"
+              className="flex-[2] items-center justify-center gap-2 rounded-xl bg-zinc-100 py-3 text-sm font-bold text-zinc-950 transition-all hover:bg-zinc-200 active:scale-98 disabled:opacity-50"
             >
               <Save size={15} />
               <span>{saving ? "Saving..." : "Save Configuration"}</span>
