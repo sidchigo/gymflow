@@ -18,6 +18,12 @@ import {
   WeeklyScheduleStoreSchema,
   type WeeklyScheduleStore,
 } from "@/types/gym";
+import {
+  AthleteStateSchema,
+  WeeklyWorkoutPlanSchema,
+  type AthleteState,
+  type WeeklyWorkoutPlan,
+} from "@/types/agent";
 
 // ---------------------------------------------------------------------------
 // Client
@@ -119,3 +125,91 @@ export async function saveWeeklyStore(
 ): Promise<void> {
   await getRedis().set(key, store, { ex: SCHEDULE_TTL });
 }
+
+// ---------------------------------------------------------------------------
+// Athlete consolidated state and user plan helpers (SPEC-004)
+// ---------------------------------------------------------------------------
+
+/** TTL for athlete state: 90 days (per spec) */
+export const ATHLETE_STATE_TTL = 90 * 24 * 60 * 60; // 7,776,000 seconds
+
+/** TTL for weekly workout plans: 14 days (per spec, scoped to user) */
+export const PLAN_TTL = 14 * 24 * 60 * 60; // 1,209,600 seconds
+
+export function athleteStateKey(userId: string): string {
+  return `athlete:state:${userId}`;
+}
+
+export function planWeekKey(userId: string, isoWeekId: string): string {
+  return `plan:${userId}:${isoWeekId}`;
+}
+
+/**
+ * Retrieve consolidated athlete state (profile, lift history, event logs).
+ * Returns null if the user does not exist or has expired.
+ */
+export async function getAthleteState(
+  userId: string,
+): Promise<AthleteState | null> {
+  const key = athleteStateKey(userId);
+  const raw = await getRedis().get<unknown>(key);
+  if (raw === null || raw === undefined) return null;
+
+  const result = AthleteStateSchema.safeParse(raw);
+  if (!result.success) {
+    console.warn(
+      `[redis] getAthleteState: cached value for "${key}" failed schema validation – treating as cache miss.`,
+      result.error.issues,
+    );
+    return null;
+  }
+
+  return result.data;
+}
+
+/**
+ * Persist consolidated athlete state (profile, lift history, event logs) with 90-day TTL.
+ */
+export async function saveAthleteState(
+  userId: string,
+  state: AthleteState,
+): Promise<void> {
+  const key = athleteStateKey(userId);
+  await getRedis().set(key, state, { ex: ATHLETE_STATE_TTL });
+}
+
+/**
+ * Retrieve user-scoped weekly workout plan.
+ */
+export async function getWeeklyWorkoutPlan(
+  userId: string,
+  isoWeekId: string,
+): Promise<WeeklyWorkoutPlan | null> {
+  const key = planWeekKey(userId, isoWeekId);
+  const raw = await getRedis().get<unknown>(key);
+  if (raw === null || raw === undefined) return null;
+
+  const result = WeeklyWorkoutPlanSchema.safeParse(raw);
+  if (!result.success) {
+    console.warn(
+      `[redis] getWeeklyWorkoutPlan: cached value for "${key}" failed schema validation – treating as cache miss.`,
+      result.error.issues,
+    );
+    return null;
+  }
+
+  return result.data;
+}
+
+/**
+ * Persist user-scoped weekly workout plan with 14-day TTL.
+ */
+export async function saveWeeklyWorkoutPlan(
+  userId: string,
+  isoWeekId: string,
+  plan: WeeklyWorkoutPlan,
+): Promise<void> {
+  const key = planWeekKey(userId, isoWeekId);
+  await getRedis().set(key, plan, { ex: PLAN_TTL });
+}
+
