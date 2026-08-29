@@ -1,4 +1,4 @@
-# [SPEC-001]: Data Contracts & Schema Validation
+# SPEC-001: Data Contracts & Schema Validation
 
 ## 1. Context & Goal
 - **Problem:** Raw responses from third-party gym APIs contain extraneous metadata (WebAuthn challenges, passkey configs, UI styling tags) that bloat context and introduce security risks.
