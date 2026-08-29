@@ -1,0 +1,257 @@
+{
+  "$schema": "./eval-schema.json",
+  "version": "1.0.0",
+  "description": "Deterministic evaluation scenarios for GymFlow S&C & Combat Sports Agent Engine",
+  "scenarios": [
+    {
+      "id": "SCENARIO_01_INITIAL_5DAY_PLAN_GENERATION",
+      "description": "Athlete requests initial 5-day week plan. Agent must schedule 1 KB and 1 BJJ class based on timetable, align heavy lifting with WFH days, program supersets on WFO days, and reserve Sunday for full rest.",
+      "input": {
+        "userMessage": "Generate my training and nutrition plan for the week.",
+        "currentDateTimeIST": "2026-08-24T06:30:00+05:30",
+        "athleteState": {
+          "userId": "user_01",
+          "profile": {
+            "userId": "user_01",
+            "weightKg": 69,
+            "heightCm": 169,
+            "targetDaysPerWeek": 5,
+            "weightUnitPreference": "KG",
+            "mandatoryCombatSessions": { "kickboxing": 1, "bjj": 1 },
+            "weeklyWorkSchedule": {
+              "Monday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Tuesday": { "mode": "WFO", "commuteMinutesOneWay": 65 },
+              "Wednesday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Thursday": { "mode": "WFO", "commuteMinutesOneWay": 65 },
+              "Friday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Saturday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Sunday": { "mode": "WFH", "commuteMinutesOneWay": 30 }
+            },
+            "dietaryPreference": "HIGH_PROTEIN_NON_VEG",
+            "targetDailyProteinGrams": 125
+          },
+          "lifts": [],
+          "events": []
+        },
+        "weeklySchedule": {
+          "lastFetchedAt": "2026-08-24T06:00:00.000+05:30",
+          "slots": [
+            { "id": "slot_kb_mon", "date": "2026-08-24", "startTime": "19:00", "endTime": "20:00", "title": "Kickboxing / S&C", "trainer": "Vikram", "room": "Combat Area", "tier": "NORMAL" },
+            { "id": "slot_bjj_wed", "date": "2026-08-26", "startTime": "19:30", "endTime": "20:30", "title": "BJJ Ground Game", "trainer": "Marcus", "room": "Dojo", "tier": "NORMAL" },
+            { "id": "slot_trx_thu", "date": "2026-08-27", "startTime": "07:30", "endTime": "08:15", "title": "TRX Conditioning", "trainer": "Rahul", "room": "Studio A", "tier": "NORMAL" }
+          ],
+          "diffs": []
+        }
+      },
+      "expectedAssertions": {
+        "toolCall": "replan_week_schedule",
+        "planRules": [
+          { "condition": "plan.length === 7", "message": "Plan must span exactly 7 days from Monday to Sunday" },
+          { "condition": "plan.filter(d => d.modality !== 'REST').length === 5", "message": "Exactly 5 training days programmed" },
+          { "condition": "plan.find(d => d.date === '2026-08-24').gymSlotId === 'slot_kb_mon'", "message": "Monday binds to Kickboxing slot" },
+          { "condition": "plan.find(d => d.date === '2026-08-26').gymSlotId === 'slot_bjj_wed'", "message": "Wednesday binds to BJJ slot" },
+          { "condition": "plan.find(d => d.date === '2026-08-30').modality === 'REST'", "message": "Sunday must be complete REST" },
+          { "condition": "plan.find(d => d.date === '2026-08-25').exercises.some(e => e.supersetGroupId !== null)", "message": "Tuesday (WFO) uses superset grouping for time efficiency" }
+        ]
+      }
+    },
+    {
+      "id": "SCENARIO_02_SCHEDULE_DIFF_CANCELLATION_REPLAN",
+      "description": "Mid-week BJJ class on Wednesday is cancelled by the gym. Agent must replace it with an open-floor combat conditioning session or strength swap without disrupting the rest of the week.",
+      "input": {
+        "userMessage": "I noticed Wednesday BJJ got cancelled. What should I do instead?",
+        "currentDateTimeIST": "2026-08-25T15:00:00+05:30",
+        "athleteState": {
+          "userId": "user_01",
+          "profile": {
+            "userId": "user_01",
+            "weightKg": 69,
+            "heightCm": 169,
+            "targetDaysPerWeek": 5,
+            "weightUnitPreference": "KG",
+            "mandatoryCombatSessions": { "kickboxing": 1, "bjj": 1 },
+            "weeklyWorkSchedule": {
+              "Monday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Tuesday": { "mode": "WFO", "commuteMinutesOneWay": 65 },
+              "Wednesday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Thursday": { "mode": "WFO", "commuteMinutesOneWay": 65 },
+              "Friday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Saturday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Sunday": { "mode": "WFH", "commuteMinutesOneWay": 30 }
+            },
+            "dietaryPreference": "HIGH_PROTEIN_NON_VEG",
+            "targetDailyProteinGrams": 125
+          },
+          "lifts": [],
+          "events": []
+        },
+        "weeklySchedule": {
+          "lastFetchedAt": "2026-08-25T14:30:00.000+05:30",
+          "slots": [
+            { "id": "slot_trx_thu", "date": "2026-08-27", "startTime": "07:30", "endTime": "08:15", "title": "TRX Conditioning", "trainer": "Rahul", "room": "Studio A", "tier": "NORMAL" }
+          ],
+          "diffs": [
+            {
+              "type": "CANCELLED",
+              "slotId": "slot_bjj_wed",
+              "title": "BJJ Ground Game",
+              "date": "2026-08-26",
+              "originalTime": "19:30",
+              "updatedTime": null,
+              "detectedAt": "2026-08-25T14:30:00.000+05:30"
+            }
+          ]
+        }
+      },
+      "expectedAssertions": {
+        "toolCall": "replan_week_schedule",
+        "planRules": [
+          { "condition": "plan.find(d => d.date === '2026-08-26').isGymClass === false", "message": "Wednesday must not be bound to cancelled gym slot" },
+          { "condition": "['KB_CONDITIONING', 'BOXING_CONDITIONING', 'UPPER_HYPERTROPHY', 'LOWER_STRENGTH', 'DUT', 'TRX', 'AB_ASSAULT', 'MOBILITY_RECOVERY', 'REST'].includes(plan.find(d => d.date === '2026-08-26').modality)", "message": "Wednesday replaced with valid alternative open-floor modality" }
+        ]
+      }
+    },
+    {
+      "id": "SCENARIO_03_ACUTE_ILLNESS_AUTO_REGULATION",
+      "description": "User reports high fever and weakness on Thursday morning. Agent must call log_athlete_event and immediately cancel high-intensity sessions for Thursday and Friday.",
+      "input": {
+        "userMessage": "I have high fever (101F) and body ache since morning. Can't workout.",
+        "currentDateTimeIST": "2026-08-27T08:00:00+05:30",
+        "athleteState": {
+          "userId": "user_01",
+          "profile": {
+            "userId": "user_01",
+            "weightKg": 69,
+            "heightCm": 169,
+            "targetDaysPerWeek": 5,
+            "weightUnitPreference": "KG",
+            "mandatoryCombatSessions": { "kickboxing": 1, "bjj": 1 },
+            "weeklyWorkSchedule": {
+              "Monday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Tuesday": { "mode": "WFO", "commuteMinutesOneWay": 65 },
+              "Wednesday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Thursday": { "mode": "WFO", "commuteMinutesOneWay": 65 },
+              "Friday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Saturday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Sunday": { "mode": "WFH", "commuteMinutesOneWay": 30 }
+            },
+            "dietaryPreference": "HIGH_PROTEIN_NON_VEG",
+            "targetDailyProteinGrams": 125
+          },
+          "lifts": [],
+          "events": []
+        },
+        "weeklySchedule": {
+          "lastFetchedAt": "2026-08-27T07:00:00.000+05:30",
+          "slots": [],
+          "diffs": []
+        }
+      },
+      "expectedAssertions": {
+        "firstToolCall": "log_athlete_event",
+        "eventVerification": {
+          "type": "ILLNESS",
+          "severity": "SEVERE"
+        },
+        "secondToolCall": "replan_week_schedule",
+        "planRules": [
+          { "condition": "['REST', 'MOBILITY_RECOVERY'].includes(plan.find(d => d.date === '2026-08-27').modality)", "message": "Thursday converted to REST or light mobility" },
+          { "condition": "['REST', 'MOBILITY_RECOVERY'].includes(plan.find(d => d.date === '2026-08-28').modality)", "message": "Friday converted to REST or light mobility" }
+        ]
+      }
+    },
+    {
+      "id": "SCENARIO_04_PROGRESSIVE_OVERLOAD_LOGGING_AND_MICROLOADING",
+      "description": "Athlete reports completing Back Squat 3x5 @ 85kg at RPE 7.5. Agent must log the performance and when planning next week, prescribe 87.5kg (+2.5kg micro-load).",
+      "input": {
+        "userMessage": "Just finished leg day. Squats: 3 sets of 5 reps at 85 kg felt smooth, RPE was around 7.5.",
+        "currentDateTimeIST": "2026-08-28T19:00:00+05:30",
+        "athleteState": {
+          "userId": "user_01",
+          "profile": {
+            "userId": "user_01",
+            "weightKg": 69,
+            "heightCm": 169,
+            "targetDaysPerWeek": 5,
+            "weightUnitPreference": "KG",
+            "mandatoryCombatSessions": { "kickboxing": 1, "bjj": 1 },
+            "weeklyWorkSchedule": {
+              "Monday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Tuesday": { "mode": "WFO", "commuteMinutesOneWay": 65 },
+              "Wednesday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Thursday": { "mode": "WFO", "commuteMinutesOneWay": 65 },
+              "Friday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Saturday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Sunday": { "mode": "WFH", "commuteMinutesOneWay": 30 }
+            },
+            "dietaryPreference": "HIGH_PROTEIN_NON_VEG",
+            "targetDailyProteinGrams": 125
+          },
+          "lifts": [],
+          "events": []
+        },
+        "weeklySchedule": {
+          "lastFetchedAt": "2026-08-28T06:00:00.000+05:30",
+          "slots": [],
+          "diffs": []
+        }
+      },
+      "expectedAssertions": {
+        "toolCall": "log_lift_performance",
+        "liftVerification": {
+          "exerciseName": "Barbell Back Squat",
+          "unit": "KG",
+          "setsCount": 3,
+          "weight": 85,
+          "reps": 5
+        }
+      }
+    },
+    {
+      "id": "SCENARIO_05_LBS_UNIT_AND_NUTRITION_QUERY",
+      "description": "User with LBS preference asks for pre-workout fuel recommendations 2 hours before high-demand Kickboxing sparring.",
+      "input": {
+        "userMessage": "I have Kickboxing sparring at 19:00 today. What should I eat right now (17:00) and what should I take post-session?",
+        "currentDateTimeIST": "2026-08-24T17:00:00+05:30",
+        "athleteState": {
+          "userId": "user_01",
+          "profile": {
+            "userId": "user_01",
+            "weightKg": 69,
+            "heightCm": 169,
+            "targetDaysPerWeek": 5,
+            "weightUnitPreference": "KG",
+            "mandatoryCombatSessions": { "kickboxing": 1, "bjj": 1 },
+            "weeklyWorkSchedule": {
+              "Monday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Tuesday": { "mode": "WFO", "commuteMinutesOneWay": 65 },
+              "Wednesday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Thursday": { "mode": "WFO", "commuteMinutesOneWay": 65 },
+              "Friday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Saturday": { "mode": "WFH", "commuteMinutesOneWay": 30 },
+              "Sunday": { "mode": "WFH", "commuteMinutesOneWay": 30 }
+            },
+            "dietaryPreference": "HIGH_PROTEIN_NON_VEG",
+            "targetDailyProteinGrams": 125
+          },
+          "lifts": [],
+          "events": []
+        },
+        "weeklySchedule": {
+          "lastFetchedAt": "2026-08-24T06:00:00.000+05:30",
+          "slots": [
+            { "id": "slot_kb_mon", "date": "2026-08-24", "startTime": "19:00", "endTime": "20:00", "title": "Kickboxing / S&C", "trainer": "Vikram", "room": "Combat Area", "tier": "NORMAL" }
+          ],
+          "diffs": []
+        }
+      },
+      "expectedAssertions": {
+        "directChatResponse": true,
+        "contentChecks": [
+          { "mustContain": ["carb", "protein", "electrolyt"] },
+          { "mustNotContain": ["replan_week_schedule"] }
+        ]
+      }
+    }
+  ]
+}

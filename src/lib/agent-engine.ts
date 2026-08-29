@@ -23,6 +23,7 @@ import {
   type LLMToolDefinition,
   type LLMProvider,
   GeminiLLMProvider,
+  getDefaultLLMProvider,
 } from "@/lib/llm-provider";
 import {
   ReplanWeekScheduleArgsSchema,
@@ -246,6 +247,7 @@ GROUND TRUTH RULES:
 2. For non-class slots (e.g. UPPER_HYPERTROPHY, LOWER_STRENGTH, REST, MOBILITY_RECOVERY), you can schedule them as needed during standard open hours.
 3. You MUST NOT modify the weekly plan or log workout performance in plain text. Any plan creation, modification, lift logging, or event logging MUST be done by calling the appropriate tool.
 4. Saturday can only be scheduled for morning sessions, and ONLY if a weekday workout was missed or requested. Sunday is strictly REST (no workouts).
+5. When a scheduled combat session (BJJ/KB) is cancelled, replace it with an alternative conditioning (KB/Boxing/DUT/TRX) or strength session that maintains the 5-day training goal.
 
 ATHLETIC REASONING & PERIODIZATION RULES:
 1. Combat Priority: Lock in the 2 combat sports sessions (Kickboxing & BJJ) first, strictly mapping them to verified gym slots.
@@ -342,7 +344,7 @@ export async function runCoachAgent(params: {
   model?: string;
 }): Promise<AgentResult> {
   const { userId, userMessage, chatHistory = [], model } = params;
-  const provider = params.provider || new GeminiLLMProvider();
+  const provider = params.provider || getDefaultLLMProvider();
 
   // 1. Resolve current week and dates
   const now = new Date();

@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "eval": "vitest run src/lib/__tests__/evals.test.ts"
   },
   "dependencies": {
     "@google/genai": "^2.19.0",

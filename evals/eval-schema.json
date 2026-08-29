@@ -1,0 +1,212 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GymFlowAgentEvalScenarios",
+  "type": "object",
+  "required": ["$schema", "version", "description", "scenarios"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "description", "input", "expectedAssertions"],
+        "properties": {
+          "id": { "type": "string" },
+          "description": { "type": "string" },
+          "input": {
+            "type": "object",
+            "required": ["userMessage", "currentDateTimeIST", "athleteState", "weeklySchedule"],
+            "properties": {
+              "userMessage": { "type": "string" },
+              "currentDateTimeIST": { "type": "string" },
+              "athleteState": {
+                "type": "object",
+                "required": ["userId", "profile", "lifts", "events"],
+                "properties": {
+                  "userId": { "type": "string" },
+                  "profile": {
+                    "type": "object",
+                    "required": [
+                      "userId",
+                      "weightKg",
+                      "heightCm",
+                      "targetDaysPerWeek",
+                      "weightUnitPreference",
+                      "mandatoryCombatSessions",
+                      "weeklyWorkSchedule",
+                      "dietaryPreference",
+                      "targetDailyProteinGrams"
+                    ],
+                    "properties": {
+                      "userId": { "type": "string" },
+                      "weightKg": { "type": "number" },
+                      "heightCm": { "type": "number" },
+                      "targetDaysPerWeek": { "type": "integer", "enum": [3, 4, 5, 6] },
+                      "weightUnitPreference": { "type": "string", "enum": ["KG", "LBS"] },
+                      "mandatoryCombatSessions": {
+                        "type": "object",
+                        "required": ["kickboxing", "bjj"],
+                        "properties": {
+                          "kickboxing": { "type": "integer" },
+                          "bjj": { "type": "integer" }
+                        }
+                      },
+                      "weeklyWorkSchedule": {
+                        "type": "object",
+                        "required": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+                        "additionalProperties": {
+                          "type": "object",
+                          "required": ["mode", "commuteMinutesOneWay"],
+                          "properties": {
+                            "mode": { "type": "string", "enum": ["WFH", "WFO"] },
+                            "commuteMinutesOneWay": { "type": "number" }
+                          }
+                        }
+                      },
+                      "dietaryPreference": {
+                        "type": "string",
+                        "enum": ["HIGH_PROTEIN_NON_VEG", "HIGH_PROTEIN_VEG", "BALANCED"]
+                      },
+                      "targetDailyProteinGrams": { "type": "number" }
+                    }
+                  },
+                  "lifts": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["date", "exerciseName", "sets"],
+                      "properties": {
+                        "date": { "type": "string" },
+                        "exerciseName": { "type": "string" },
+                        "sets": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "required": ["setNumber", "weight", "unit", "repsCompleted"],
+                            "properties": {
+                              "setNumber": { "type": "integer" },
+                              "weight": { "type": "number" },
+                              "unit": { "type": "string", "enum": ["KG", "LBS"] },
+                              "repsCompleted": { "type": "integer" },
+                              "rpe": { "type": ["number", "null"] }
+                            }
+                          }
+                        },
+                        "notes": { "type": ["string", "null"] }
+                      }
+                    }
+                  },
+                  "events": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["date", "type", "severity", "notes"],
+                      "properties": {
+                        "date": { "type": "string" },
+                        "type": {
+                          "type": "string",
+                          "enum": ["ILLNESS", "MISSED_SESSION", "SORENESS_OVERLOAD", "TRAVEL_WORK"]
+                        },
+                        "severity": { "type": "string", "enum": ["MILD", "MODERATE", "SEVERE"] },
+                        "notes": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              },
+              "weeklySchedule": {
+                "type": "object",
+                "required": ["lastFetchedAt", "slots", "diffs"],
+                "properties": {
+                  "lastFetchedAt": { "type": "string" },
+                  "slots": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["id", "date", "startTime", "endTime", "title", "trainer", "room", "tier"],
+                      "properties": {
+                        "id": { "type": "string" },
+                        "date": { "type": "string" },
+                        "startTime": { "type": "string" },
+                        "endTime": { "type": "string" },
+                        "title": { "type": "string" },
+                        "trainer": { "type": "string" },
+                        "room": { "type": "string" },
+                        "tier": { "type": "string" }
+                      }
+                    }
+                  },
+                  "diffs": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["type", "slotId", "title", "date", "originalTime", "detectedAt"],
+                      "properties": {
+                        "type": { "type": "string", "enum": ["CANCELLED", "RESCHEDULED", "NEW"] },
+                        "slotId": { "type": "string" },
+                        "title": { "type": "string" },
+                        "date": { "type": "string" },
+                        "originalTime": { "type": "string" },
+                        "updatedTime": { "type": ["string", "null"] },
+                        "detectedAt": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "expectedAssertions": {
+            "type": "object",
+            "properties": {
+              "toolCall": { "type": "string" },
+              "firstToolCall": { "type": "string" },
+              "secondToolCall": { "type": "string" },
+              "directChatResponse": { "type": "boolean" },
+              "eventVerification": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string" },
+                  "severity": { "type": "string" }
+                }
+              },
+              "liftVerification": {
+                "type": "object",
+                "properties": {
+                  "exerciseName": { "type": "string" },
+                  "unit": { "type": "string" },
+                  "setsCount": { "type": "integer" },
+                  "weight": { "type": "number" },
+                  "reps": { "type": "integer" }
+                }
+              },
+              "planRules": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["condition", "message"],
+                  "properties": {
+                    "condition": { "type": "string" },
+                    "message": { "type": "string" }
+                  }
+                }
+              },
+              "contentChecks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "mustContain": { "type": "array", "items": { "type": "string" } },
+                    "mustNotContain": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
