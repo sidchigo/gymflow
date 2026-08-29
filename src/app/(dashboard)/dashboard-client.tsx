@@ -6,24 +6,30 @@ import WeekStrip from "@/components/mobile/week-strip";
 import DayCardView from "@/components/mobile/day-card-view";
 import DiffToast from "@/components/mobile/diff-toast";
 import CoachSheet from "@/components/chat/coach-sheet";
+import ProfileSettingsDialog from "@/components/settings/profile-settings-dialog";
 import { type ChatMessage } from "@/components/chat/message-stream";
 import { type WeeklyScheduleStore } from "@/types/gym";
-import { type WeeklyWorkoutPlan, type AthleteState } from "@/types/agent";
+import { type WeeklyWorkoutPlan, type AthleteState, type AthleteProfile } from "@/types/agent";
 
 interface DashboardClientProps {
   initialSchedule: WeeklyScheduleStore;
   initialPlan: WeeklyWorkoutPlan | null;
-  athleteState: AthleteState;
+  initialAthleteState: AthleteState;
+  initialConfigured: boolean;
 }
 
 export default function DashboardClient({
   initialSchedule,
   initialPlan,
-  athleteState,
+  initialAthleteState,
+  initialConfigured,
 }: DashboardClientProps) {
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [schedule, setSchedule] = useState<WeeklyScheduleStore>(initialSchedule);
   const [plan, setPlan] = useState<WeeklyWorkoutPlan | null>(initialPlan);
+  const [athleteState, setAthleteState] = useState<AthleteState>(initialAthleteState);
+  const [isConfigured, setIsConfigured] = useState(initialConfigured);
+  const [settingsOpen, setSettingsOpen] = useState(!initialConfigured);
   const [syncing, setSyncing] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -212,6 +218,14 @@ export default function DashboardClient({
     }
   };
 
+  const handleSaveSuccess = (updatedProfile: AthleteProfile) => {
+    setAthleteState((prev) => ({
+      ...prev,
+      profile: updatedProfile,
+    }));
+    setIsConfigured(true);
+  };
+
   return (
     <div className="flex h-screen w-full flex-col lg:flex-row">
       {/* Primary Dashboard Container */}
@@ -223,6 +237,7 @@ export default function DashboardClient({
           workMode={currentWorkMode}
           onSync={handleSyncTimetable}
           syncing={syncing}
+          onSettingsOpen={() => setSettingsOpen(true)}
         />
 
         {/* Schedule Diff Alerts Toast */}
@@ -252,7 +267,16 @@ export default function DashboardClient({
         messages={messages}
         executingTool={executingTool}
         onSendMessage={handleSendMessage}
-        disabled={!!executingTool}
+        disabled={!!executingTool || !isConfigured}
+      />
+
+      {/* Settings Configuration Modal */}
+      <ProfileSettingsDialog
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onSaveSuccess={handleSaveSuccess}
+        initialProfile={athleteState.profile}
+        forceSetup={!isConfigured}
       />
     </div>
   );

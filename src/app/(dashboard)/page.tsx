@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
-import { getAthleteState, saveAthleteState, getWeeklyWorkoutPlan } from "@/lib/redis";
+import { getAthleteState, getWeeklyWorkoutPlan } from "@/lib/redis";
 import { getOrSyncWeeklySchedule } from "@/lib/schedule-service";
 import { weekKey } from "@/lib/schedule-service";
 import DashboardClient from "./dashboard-client";
@@ -27,8 +27,10 @@ export default async function DashboardPage() {
   const { userId } = session;
 
   // 2. Fetch and seed athlete profile if missing
+  let isConfigured = true;
   let athleteState = await getAthleteState(userId);
   if (!athleteState) {
+    isConfigured = false;
     athleteState = {
       profile: {
         userId,
@@ -67,7 +69,6 @@ export default async function DashboardPage() {
       lifts: [],
       events: [],
     };
-    await saveAthleteState(userId, athleteState);
   }
 
   // 3. Fetch weekly timetable schedule
@@ -93,7 +94,8 @@ export default async function DashboardPage() {
     <DashboardClient
       initialSchedule={scheduleStore}
       initialPlan={weeklyPlan}
-      athleteState={athleteState}
+      initialAthleteState={athleteState}
+      initialConfigured={isConfigured}
     />
   );
 }

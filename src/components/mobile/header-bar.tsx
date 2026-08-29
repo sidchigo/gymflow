@@ -1,4 +1,4 @@
-import { RefreshCw, MapPin } from "lucide-react";
+import { RefreshCw, MapPin, Settings } from "lucide-react";
 
 interface HeaderBarProps {
   currentDateStr: string; // e.g. "Sat, 29 Aug"
@@ -6,6 +6,7 @@ interface HeaderBarProps {
   workMode: "WFH" | "WFO";
   onSync: () => void;
   syncing: boolean;
+  onSettingsOpen: () => void;
 }
 
 export default function HeaderBar({
@@ -14,6 +15,7 @@ export default function HeaderBar({
   workMode,
   onSync,
   syncing,
+  onSettingsOpen,
 }: HeaderBarProps) {
   return (
     <header className="sticky top-0 z-30 flex h-14 w-full items-center justify-between border-b border-zinc-900 bg-black/90 px-4 backdrop-blur-md">
@@ -46,6 +48,14 @@ export default function HeaderBar({
           className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-850 bg-zinc-950 text-zinc-400 transition-all hover:bg-zinc-900 hover:text-zinc-100 active:scale-95 disabled:opacity-50"
         >
           <RefreshCw size={14} className={syncing ? "animate-spin text-indigo-400" : ""} />
+        </button>
+
+        {/* Settings Button */}
+        <button
+          onClick={onSettingsOpen}
+          className="flex h-8 w-8 items-center justify-center rounded-full border border-zinc-850 bg-zinc-950 text-zinc-400 transition-all hover:bg-zinc-900 hover:text-zinc-100 active:scale-95"
+        >
+          <Settings size={14} />
         </button>
       </div>
     </header>
