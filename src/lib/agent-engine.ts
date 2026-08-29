@@ -533,3 +533,223 @@ export async function runCoachAgent(params: {
 
   throw new Error("Coach agent execution exceeded maximum tool calling loops.");
 }
+
+export async function runCoachAgentStream(params: {
+  userId: string;
+  userMessage: string;
+  chatHistory?: LLMMessage[];
+  provider?: GeminiLLMProvider;
+  model?: string;
+  onEvent: (event: {
+    type: "text" | "tool_start" | "tool_end";
+    text?: string;
+    name?: string;
+    args?: Record<string, unknown>;
+    result?: string;
+  }) => void;
+}): Promise<AgentResult> {
+  const { userId, userMessage, chatHistory = [], model, onEvent } = params;
+  const provider = params.provider || new GeminiLLMProvider();
+
+  // 1. Resolve current week and dates
+  const now = new Date();
+  const isoWeekId = weekKey(now);
+  const currentDateIST = nowISTDateTime();
+
+  // 2. Fetch state in parallel from Redis
+  const scheduleStoreKey = scheduleWeekKey(isoWeekId);
+  const [athleteState, weeklyGymStore, currentPlanDoc] = await Promise.all([
+    getAthleteState(userId),
+    getWeeklyStore(scheduleStoreKey),
+    getWeeklyWorkoutPlan(userId, isoWeekId),
+  ]);
+
+  if (!athleteState) {
+    throw new Error(`Athlete profile/state not found for user: ${userId}`);
+  }
+
+  // 3. Formulate prompt context elements
+  const slotsText =
+    weeklyGymStore?.slots && weeklyGymStore.slots.length > 0
+      ? weeklyGymStore.slots
+          .map((s) => `  * Slot [${s.id}] - ${s.date} (${s.startTime}-${s.endTime}): ${s.title} by ${s.trainer}`)
+          .join("\n")
+      : "  (No scheduled classes found)";
+
+  const diffsText =
+    weeklyGymStore?.diffs && weeklyGymStore.diffs.length > 0
+      ? weeklyGymStore.diffs
+          .map((d) => `  * [${d.type}] Slot [${d.slotId}] - ${d.title} on ${d.date} original time: ${d.originalTime}`)
+          .join("\n")
+      : "  (No class changes/cancellations detected)";
+
+  const currentPlanText = currentPlanDoc
+    ? currentPlanDoc.plan
+        .map((p) => {
+          const exercisesStr = p.exercises
+            .map(
+              (e) =>
+                `    - ${e.name} ${e.sets}x${e.reps} @ ${e.targetWeight || "?"} ${e.unit} (RPE ${e.targetRpe || "N/A"})${
+                  e.supersetGroupId ? ` [Super: ${e.supersetGroupId}${e.orderInGroup || ""}]` : ""
+                }`
+            )
+            .join("\n");
+          return `  * ${p.date} (${p.day}) - ${p.focus} [${p.modality}] (Time: ${p.plannedTime})\n${exercisesStr}\n    Fuel: ${p.nutritionAdvice}`;
+        })
+        .join("\n")
+    : "  (No active weekly plan found)";
+
+  const systemPrompt = buildSystemPrompt({
+    athleteState,
+    gymScheduleSlots: slotsText,
+    gymScheduleDiffs: diffsText,
+    currentPlan: currentPlanText,
+    currentDateIST,
+  });
+
+  // 4. Set up message queue
+  const messages: LLMMessage[] = [
+    { role: "system", parts: [{ text: systemPrompt }] },
+    ...chatHistory,
+    { role: "user", parts: [{ text: userMessage }] },
+  ];
+
+  const toolCallsExecuted: AgentResult["toolCallsExecuted"] = [];
+  let loopCount = 0;
+  const maxLoops = 5;
+  let finalResponseText = "";
+
+  while (loopCount < maxLoops) {
+    loopCount++;
+
+    const completionParams: {
+      messages: LLMMessage[];
+      tools?: LLMToolDefinition[];
+      model?: string;
+    } = { messages };
+
+    if (toolsList) {
+      completionParams.tools = toolsList;
+    }
+    if (model) {
+      completionParams.model = model;
+    }
+
+    let text = "";
+    let toolCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+
+    const generator = provider.generateCompletionStream(completionParams);
+    for await (const chunk of generator) {
+      if (chunk.text) {
+        text += chunk.text;
+        finalResponseText += chunk.text;
+        onEvent({ type: "text", text: chunk.text });
+      }
+      if (chunk.toolCalls && chunk.toolCalls.length > 0) {
+        toolCalls.push(...chunk.toolCalls);
+      }
+    }
+
+    if (toolCalls.length > 0) {
+      messages.push({
+        role: "model",
+        parts: toolCalls.map((tc) => ({
+          functionCall: {
+            name: tc.name,
+            args: tc.args,
+          },
+        })),
+      });
+
+      const responseParts: LLMMessage["parts"] = [];
+
+      for (const call of toolCalls) {
+        onEvent({ type: "tool_start", name: call.name, args: call.args });
+
+        let executionResult: string;
+        try {
+          if (call.name === "replan_week_schedule") {
+            const args = ReplanWeekScheduleArgsSchema.parse(call.args);
+            const fullPlan: WeeklyWorkoutPlan = {
+              plan: args.plan,
+              reasoning: args.reasoning,
+              updatedAt: nowIST(),
+            };
+            await saveWeeklyWorkoutPlan(userId, isoWeekId, fullPlan);
+            executionResult = JSON.stringify({
+              success: true,
+              message: "Weekly plan successfully generated/updated and saved to Redis.",
+            });
+          } else if (call.name === "log_lift_performance") {
+            const args = LogLiftPerformanceArgsSchema.parse(call.args);
+            athleteState.lifts.push({
+              date: args.date,
+              exerciseName: args.exerciseName,
+              sets: args.sets.map((s) => ({
+                setNumber: s.setNumber,
+                weight: s.weight,
+                unit: args.unit,
+                repsCompleted: s.repsCompleted,
+                rpe: s.rpe,
+              })),
+              notes: args.notes,
+            });
+            await saveAthleteState(userId, athleteState);
+            executionResult = JSON.stringify({
+              success: true,
+              message: `Lifting performance for "${args.exerciseName}" logged.`,
+            });
+          } else if (call.name === "log_athlete_event") {
+            const args = LogAthleteEventArgsSchema.parse(call.args);
+            athleteState.events.push({
+              date: args.date,
+              type: args.type,
+              severity: args.severity,
+              notes: args.notes,
+            });
+            await saveAthleteState(userId, athleteState);
+            executionResult = JSON.stringify({
+              success: true,
+              message: `Event [${args.type}] logged. Coach will auto-regulate intensity/planning.`,
+            });
+          } else {
+            executionResult = JSON.stringify({
+              error: `Unknown tool: ${call.name}`,
+            });
+          }
+        } catch (err: any) {
+          executionResult = JSON.stringify({
+            error: err.message || "Failed to execute tool",
+          });
+        }
+
+        toolCallsExecuted.push({
+          name: call.name,
+          args: call.args,
+          result: executionResult,
+        });
+
+        onEvent({ type: "tool_end", name: call.name, result: executionResult });
+
+        responseParts.push({
+          functionResponse: {
+            name: call.name,
+            response: JSON.parse(executionResult),
+          },
+        });
+      }
+
+      messages.push({
+        role: "user",
+        parts: responseParts,
+      });
+    } else {
+      return {
+        text: finalResponseText || "No response text generated.",
+        toolCallsExecuted,
+      };
+    }
+  }
+
+  throw new Error("Coach agent execution exceeded maximum tool calling loops.");
+}

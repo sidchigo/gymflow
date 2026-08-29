@@ -54,6 +54,14 @@ export interface LLMProvider {
     tools?: LLMToolDefinition[];
     model?: string;
   }): Promise<LLMResponse>;
+  generateCompletionStream?(params: {
+    messages: LLMMessage[];
+    tools?: LLMToolDefinition[];
+    model?: string;
+  }): AsyncGenerator<{
+    text?: string | undefined;
+    toolCalls?: Array<{ name: string; args: Record<string, unknown> }> | undefined;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,7 +75,11 @@ export class GeminiLLMProvider implements LLMProvider {
   constructor(options?: { apiKey?: string; defaultModel?: string }) {
     // GoogleGenAI reads process.env.GEMINI_API_KEY if no apiKey is provided.
     const genaiOptions: { apiKey?: string } = {};
-    const apiKey = options?.apiKey || process.env.GEMINI_API_KEY;
+    const apiKey =
+      options?.apiKey ||
+      process.env.GEMINI_API_KEY ||
+      process.env.GOOGLE_GENAI_API_KEY ||
+      process.env.LLM_API_KEY;
     if (apiKey) {
       genaiOptions.apiKey = apiKey;
     }
@@ -173,5 +185,92 @@ export class GeminiLLMProvider implements LLMProvider {
     }
 
     return finalResponse;
+  }
+
+  async *generateCompletionStream(params: {
+    messages: LLMMessage[];
+    tools?: LLMToolDefinition[];
+    model?: string;
+  }): AsyncGenerator<{
+    text?: string | undefined;
+    toolCalls?: Array<{ name: string; args: Record<string, unknown> }> | undefined;
+  }> {
+    const modelName = params.model || this.defaultModel;
+
+    const systemMessage = params.messages.find((m) => m.role === "system");
+    const systemInstruction = systemMessage?.parts
+      .map((p) => p.text)
+      .filter(Boolean)
+      .join("\n");
+
+    const contents = params.messages
+      .filter((m) => m.role !== "system")
+      .map((m) => {
+        let role: "user" | "model" = "user";
+        if (m.role === "model") {
+          role = "model";
+        }
+
+        const parts = m.parts.map((p) => {
+          if (p.functionCall) {
+            return {
+              functionCall: {
+                name: p.functionCall.name,
+                args: p.functionCall.args,
+              },
+            };
+          }
+          if (p.functionResponse) {
+            return {
+              functionResponse: {
+                name: p.functionResponse.name,
+                response: p.functionResponse.response,
+              },
+            };
+          }
+          return { text: p.text || "" };
+        });
+
+        return { role, parts };
+      });
+
+    const configTools = params.tools
+      ? ([
+          {
+            functionDeclarations: params.tools.map((t) => ({
+              name: t.name,
+              description: t.description,
+              parameters: t.parameters,
+            })),
+          },
+        ] as any)
+      : undefined;
+
+    const configObj: any = {};
+    if (systemInstruction) {
+      configObj.systemInstruction = systemInstruction;
+    }
+    if (configTools) {
+      configObj.tools = configTools;
+    }
+
+    const responseStream = await this.ai.models.generateContentStream({
+      model: modelName,
+      contents,
+      config: configObj,
+    });
+
+    for await (const chunk of responseStream) {
+      const text = chunk.text || undefined;
+      const rawCalls = chunk.functionCalls;
+      const toolCalls = rawCalls
+        ?.filter((c) => c.name !== undefined)
+        .map((c) => ({
+          name: c.name!,
+          args: (c.args as Record<string, unknown>) || {},
+        }));
+
+      yield { text, toolCalls };
+    }
   }
 }
