@@ -1,26 +1,103 @@
 @import "tailwindcss";
 
+/* ─── Design Tokens ──────────────────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a0014;
+  --foreground: #f1f5f9;
+
+  /* Accent system — vivid violet/purple */
+  --accent: #7c3aed;             /* violet-600 */
+  --accent-bright: #8b5cf6;      /* violet-500 */
+  --accent-glow: rgba(124, 58, 237, 0.22);
+  --accent-dim: rgba(124, 58, 237, 0.08);
+
+  /* Legacy green aliases mapped to purple for backward compat */
+  --accent-green: #7c3aed;
+  --accent-green-glow: rgba(124, 58, 237, 0.22);
+  --accent-green-dim: rgba(124, 58, 237, 0.08);
+
+  /* Surface hierarchy — deep violet-tinted darks */
+  --surface-0: #0a0014;          /* page background */
+  --surface-1: #0f0020;          /* card base */
+  --surface-2: #150030;          /* elevated card */
+  --surface-3: #1c0040;          /* hover / pressed */
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-jakarta);
+  --font-mono: var(--font-space-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* ─── Base Reset ─────────────────────────────────────────────────────────── */
+html,
+body {
+  background: var(--background);
+  /* Radial purple glow emanating from top-center — mirrors reference image */
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(109, 40, 217, 0.55) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 50% 0%, rgba(124, 58, 237, 0.3) 0%, transparent 60%),
+    radial-gradient(ellipse 100% 80% at 50% 100%, rgba(45, 0, 90, 0.4) 0%, transparent 70%);
+  background-attachment: fixed;
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Custom Utilities ───────────────────────────────────────────────────── */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@utility tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Accent Glow Shadows ────────────────────────────────────────────────── */
+@utility glow-green-sm {
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.30), 0 0 4px rgba(124, 58, 237, 0.12);
+}
+
+@utility glow-green-md {
+  box-shadow: 0 0 24px rgba(124, 58, 237, 0.38), 0 0 8px rgba(124, 58, 237, 0.18);
+}
+
+@utility glow-accent-sm {
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.30), 0 0 4px rgba(124, 58, 237, 0.12);
+}
+
+@utility glow-accent-md {
+  box-shadow: 0 0 24px rgba(124, 58, 237, 0.38), 0 0 8px rgba(124, 58, 237, 0.18);
+}
+
+@utility glow-white-sm {
+  box-shadow: 0 0 16px rgba(255, 255, 255, 0.1), 0 0 6px rgba(255, 255, 255, 0.06);
+}
+
+/* ─── Card Noise Texture ─────────────────────────────────────────────────── */
+@utility card-surface {
+  background: var(--surface-1);
+  position: relative;
+}
+
+/* ─── Scroll Snap Strip ─────────────────────────────────────────────────── */
+@utility snap-x-mandatory {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+@utility snap-center {
+  scroll-snap-align: center;
 }

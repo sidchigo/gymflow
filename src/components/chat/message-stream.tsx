@@ -1,4 +1,7 @@
+"use client";
+
 import { useEffect, useRef } from "react";
+import { Sparkles } from "lucide-react";
 import ToolIndicator from "./tool-indicator";
 
 export interface ChatMessage {
@@ -16,7 +19,6 @@ interface MessageStreamProps {
 export default function MessageStream({ messages, executingTool }: MessageStreamProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom on new messages or updates
   useEffect(() => {
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
@@ -26,20 +28,36 @@ export default function MessageStream({ messages, executingTool }: MessageStream
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto px-4 py-4 space-y-4 no-scrollbar bg-zinc-950/30"
+      className="flex-1 overflow-y-auto no-scrollbar px-4 py-5 space-y-3"
     >
+      {/* ─── Empty state ───────────────────────────────────────────────── */}
       {messages.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-20 text-center text-zinc-500">
-          <span className="text-3xl">💬</span>
-          <p className="mt-4 text-xs font-bold uppercase tracking-wider text-zinc-400">
-            GymFlow Coach AI
-          </p>
-          <p className="mt-1 text-xs text-zinc-550 max-w-[220px]">
-            Say hi to plan your week or ask for advice on progressive overload.
-          </p>
+        <div className="flex flex-col items-center justify-center h-full py-12 text-center gap-4">
+          <div
+            className="flex h-14 w-14 items-center justify-center rounded-2xl"
+            style={{
+              background: "rgba(124,58,237,0.10)",
+              border: "1px solid rgba(124,58,237,0.22)",
+              boxShadow: "0 0 20px rgba(124,58,237,0.12)",
+            }}
+          >
+            <Sparkles
+              size={22}
+              strokeWidth={1.5}
+              className="text-violet-400"
+              style={{ filter: "drop-shadow(0 0 6px rgba(124,58,237,0.5))" }}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <p className="text-sm font-bold text-zinc-300">GymFlow Coach AI</p>
+            <p className="text-xs text-zinc-600 max-w-[200px] leading-relaxed">
+              Ask about progressive overload, replanning, or any training context.
+            </p>
+          </div>
         </div>
       )}
 
+      {/* ─── Message bubbles ───────────────────────────────────────────── */}
       {messages.map((msg) => {
         const isUser = msg.sender === "user";
         return (
@@ -48,18 +66,38 @@ export default function MessageStream({ messages, executingTool }: MessageStream
             className={`flex w-full ${isUser ? "justify-end" : "justify-start"}`}
           >
             <div
-              className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-md ${
+              className={[
+                "max-w-[82%] rounded-2xl px-4 py-3 text-sm leading-relaxed",
+                isUser ? "rounded-tr-sm" : "rounded-tl-sm",
+              ].join(" ")}
+              style={
                 isUser
-                  ? "bg-zinc-100 text-zinc-950 font-semibold rounded-tr-none"
-                  : "bg-zinc-900 border border-zinc-850 text-zinc-200 rounded-tl-none font-medium"
-              }`}
+                  ? {
+                      // User: high-contrast white bubble
+                      background:
+                        "linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)",
+                      color: "#0f172a",
+                      fontWeight: 600,
+                      boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
+                    }
+                  : {
+                      // Coach: dark card with subtle green tint
+                      background:
+                        "linear-gradient(135deg, #141a28 0%, #111520 100%)",
+                      border: "1px solid rgba(63,63,70,0.6)",
+                      color: "#cbd5e1",
+                      fontWeight: 500,
+                      boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
+                    }
+              }
             >
-              {/* Message text with line break support */}
               <div className="whitespace-pre-wrap select-text">{msg.text}</div>
 
-              {/* Tool Execution status within a message if applicable */}
               {msg.executingTool && (
-                <div className="mt-2 pt-2 border-t border-zinc-800">
+                <div
+                  className="mt-2 pt-2"
+                  style={{ borderTop: "1px solid rgba(63,63,70,0.5)" }}
+                >
                   <ToolIndicator toolName={msg.executingTool} />
                 </div>
               )}
@@ -68,10 +106,16 @@ export default function MessageStream({ messages, executingTool }: MessageStream
         );
       })}
 
-      {/* Global active tool loader */}
+      {/* ─── Active tool loader bubble ─────────────────────────────────── */}
       {executingTool && (
         <div className="flex w-full justify-start">
-          <div className="max-w-[85%] rounded-2xl rounded-tl-none bg-zinc-900 border border-zinc-850 px-4 py-3 shadow-md">
+          <div
+            className="max-w-[82%] rounded-2xl rounded-tl-sm px-4 py-3"
+            style={{
+              background: "linear-gradient(135deg, #141a28 0%, #111520 100%)",
+              border: "1px solid rgba(63,63,70,0.6)",
+            }}
+          >
             <ToolIndicator toolName={executingTool} />
           </div>
         </div>

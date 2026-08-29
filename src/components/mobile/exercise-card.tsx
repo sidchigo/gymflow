@@ -8,60 +8,72 @@ interface ExerciseCardProps {
 export default function ExerciseCard({ exercise }: ExerciseCardProps) {
   const isSuperset = !!exercise.supersetGroupId;
   const supersetLabel = isSuperset
-    ? `${exercise.supersetGroupId}${exercise.orderInGroup || 1}`
+    ? `[${exercise.supersetGroupId}${exercise.orderInGroup ?? ""}]`
     : null;
 
   return (
     <div
-      className={`relative flex flex-col p-4 transition-all ${
+      className={[
+        "relative flex flex-col transition-all",
         isSuperset
-          ? "border-l-4 border-indigo-500 bg-indigo-950/10 rounded-r-lg my-2"
-          : "rounded-xl border border-zinc-900 bg-zinc-950/40 my-2.5"
-      }`}
+          ? "border-l-2 border-violet-500 bg-violet-950/10 rounded-r-2xl p-4 my-1"
+          : "bg-[#0e121d] border border-zinc-800/90 rounded-2xl p-4 my-1",
+      ].join(" ")}
     >
-      {/* Superset Group Indicator */}
-      {supersetLabel && (
-        <span className="absolute top-3 right-3 rounded bg-indigo-500/20 px-1.5 py-0.5 text-[10px] font-extrabold tracking-wider text-indigo-400 uppercase">
-          Superset {supersetLabel}
-        </span>
-      )}
+      {/* ─── Header Row ─────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-3">
+        <h4 className="text-sm font-bold text-zinc-100 leading-snug flex-1 min-w-0">
+          {exercise.name}
+        </h4>
 
-      {/* Exercise Name */}
-      <h4 className="text-sm font-extrabold text-zinc-100 pr-16">{exercise.name}</h4>
-
-      {/* Prescribed Sets & Reps & Weight */}
-      <div className="mt-2.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
-        <span className="font-extrabold text-zinc-200">
-          {exercise.sets} <span className="text-zinc-500 font-medium">×</span> {exercise.reps}
-        </span>
-        {exercise.targetWeight !== undefined && exercise.targetWeight !== null && (
-          <>
-            <span className="text-zinc-500">@</span>
-            <span className="font-extrabold text-zinc-100">
-              {exercise.targetWeight} {exercise.unit}
-            </span>
-          </>
-        )}
-        {exercise.targetRpe && (
-          <>
-            <span className="text-zinc-600 font-light">•</span>
-            <span className="rounded bg-zinc-900 px-1.5 py-0.5 text-xs font-semibold text-zinc-400">
-              RPE {exercise.targetRpe}
-            </span>
-          </>
+        {/* Superset badge [A1] */}
+        {supersetLabel && (
+          <span className="shrink-0 font-mono text-[10px] font-bold tracking-wider text-violet-400 bg-violet-950/60 border border-violet-500/30 rounded px-1.5 py-0.5">
+            {supersetLabel}
+          </span>
         )}
       </div>
 
-      {/* Footer Metadata: Rest, Progression Note */}
-      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-zinc-900/60 pt-2.5 text-xs text-zinc-400">
-        <span className="flex items-center gap-1.5">
-          <Clock size={11} className="text-zinc-500" />
+      {/* ─── Metric Pills Row ───────────────────────────────────────── */}
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        {/* Sets */}
+        <span className="rounded-lg bg-zinc-800/70 border border-zinc-700/50 px-2.5 py-1 font-mono text-xs text-zinc-300 tabular-nums">
+          {exercise.sets} sets
+        </span>
+
+        {/* Reps */}
+        <span className="rounded-lg bg-zinc-800/70 border border-zinc-700/50 px-2.5 py-1 font-mono text-xs text-zinc-300">
+          {exercise.reps} reps
+        </span>
+
+        {/* Target Weight */}
+        {exercise.targetWeight != null && (
+          <span className="rounded-lg bg-zinc-800/70 border border-zinc-700/50 px-2.5 py-1 font-mono text-xs font-bold text-zinc-100 tabular-nums">
+            {exercise.targetWeight.toFixed(1)}{" "}
+            <span className="text-zinc-400 font-medium uppercase text-[10px]">
+              {exercise.unit}
+            </span>
+          </span>
+        )}
+
+        {/* RPE */}
+        {exercise.targetRpe != null && (
+          <span className="rounded-lg bg-zinc-800/70 border border-zinc-700/50 px-2.5 py-1 font-mono text-[11px] text-zinc-400 tabular-nums">
+            RPE {exercise.targetRpe.toFixed(1)}
+          </span>
+        )}
+      </div>
+
+      {/* ─── Footer: Rest + Progression Delta ──────────────────────── */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-zinc-800/40 pt-2.5">
+        <span className="flex items-center gap-1.5 font-mono text-[11px] text-zinc-500 tabular-nums">
+          <Clock size={10} strokeWidth={2} className="text-zinc-600 shrink-0" />
           {exercise.restSeconds}s rest
         </span>
 
         {exercise.progressionNote && (
-          <span className="flex items-center gap-1 text-indigo-400">
-            <TrendingUp size={11} />
+          <span className="flex items-center gap-1.5 text-[11px] text-violet-400 font-medium">
+            <TrendingUp size={10} strokeWidth={2} className="shrink-0" />
             {exercise.progressionNote}
           </span>
         )}
