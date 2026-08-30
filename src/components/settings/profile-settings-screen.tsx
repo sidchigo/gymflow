@@ -6,6 +6,7 @@ import {
   type AthleteProfile,
   type Modality,
   type DietPreference,
+  type WeightUnit,
 } from "@/types/agent";
 
 interface ProfileSettingsScreenProps {
@@ -52,6 +53,11 @@ const DIET_OPTIONS: readonly { value: DietPreference; label: string }[] = [
   { value: "HIGH_PROTEIN_NON_VEG", label: "Non-Veg" },
   { value: "HIGH_PROTEIN_VEG", label: "Veg" },
   { value: "BALANCED", label: "Balanced" },
+] as const;
+
+const UNIT_OPTIONS: readonly { value: WeightUnit; label: string }[] = [
+  { value: "KG", label: "Metric (KG)" },
+  { value: "LBS", label: "Imperial (LBS)" },
 ] as const;
 
 const MODALITY_LABELS: Record<Modality, string> = {
@@ -156,6 +162,9 @@ export default function ProfileSettingsScreen({
 
   const [weight, setWeight] = useState(initialProfile?.weightKg ?? 74);
   const [height, setHeight] = useState(initialProfile?.heightCm ?? 178);
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>(
+    initialProfile?.weightUnitPreference ?? "KG"
+  );
   const [diet, setDiet] = useState<DietPreference>(
     initialProfile?.dietaryPreference ?? "HIGH_PROTEIN_NON_VEG"
   );
@@ -259,7 +268,7 @@ export default function ProfileSettingsScreen({
     const payload: Omit<AthleteProfile, "userId"> & { userId: string } = {
       userId: initialProfile?.userId ?? "temp-user",
       weightKg: weight,
-      weightUnitPreference: "KG",
+      weightUnitPreference: weightUnit,
       heightCm: height,
       targetDaysPerWeek: 5,
       mandatoryCombatSessions: { kickboxing: kickboxingCount, bjj: bjjCount },
@@ -384,6 +393,17 @@ export default function ProfileSettingsScreen({
                     className="w-full h-10 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 font-mono text-xs text-zinc-100 outline-none focus:border-zinc-700 transition-all tabular-nums"
                   />
                 </div>
+              </div>
+              <div className="space-y-1.5 pt-2">
+                <label className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
+                  Preferred Weight Unit
+                </label>
+                <SegmentedToggle
+                  id="settings-weight-unit"
+                  options={UNIT_OPTIONS}
+                  value={weightUnit}
+                  onChange={setWeightUnit}
+                />
               </div>
             </section>
 

@@ -317,6 +317,7 @@ export default function DayCardView({ plan, athleteState }: DayCardViewProps) {
                 <ExerciseCard
                   key={`${exercise.name}-${idx}`}
                   exercise={exercise}
+                  preferredUnit={athleteState.profile.weightUnitPreference}
                 />
               ))}
             </div>

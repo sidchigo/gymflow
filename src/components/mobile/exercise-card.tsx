@@ -1,11 +1,12 @@
 import { Clock, TrendingUp, Link2 } from "lucide-react";
-import { type PlannedExercise } from "@/types/agent";
+import { type PlannedExercise, type WeightUnit } from "@/types/agent";
 
 interface ExerciseCardProps {
   exercise: PlannedExercise;
+  preferredUnit?: WeightUnit;
 }
 
-export default function ExerciseCard({ exercise }: ExerciseCardProps) {
+export default function ExerciseCard({ exercise, preferredUnit }: ExerciseCardProps) {
   const isSuperset = !!exercise.supersetGroupId;
 
   /* Clean label: "A1", "B2" (no brackets) */
@@ -13,12 +14,26 @@ export default function ExerciseCard({ exercise }: ExerciseCardProps) {
     ? `${exercise.supersetGroupId}${exercise.orderInGroup ?? ""}`
     : null;
 
+  // Runtime weight and unit conversion
+  let displayWeight = exercise.targetWeight;
+  let displayUnit = exercise.unit || "KG";
+
+  if (displayWeight != null && preferredUnit && preferredUnit !== displayUnit) {
+    if (preferredUnit === "LBS" && displayUnit === "KG") {
+      displayWeight = displayWeight * 2.20462;
+      displayUnit = "LBS";
+    } else if (preferredUnit === "KG" && displayUnit === "LBS") {
+      displayWeight = displayWeight * 0.453592;
+      displayUnit = "KG";
+    }
+  }
+
   /* Telemetry readout: "3 sets × 8-12 reps • 85.0 kg • RPE 8.0" */
   const telemetryParts: string[] = [
     `${exercise.sets} sets × ${exercise.reps} reps`,
   ];
-  if (exercise.targetWeight != null) {
-    telemetryParts.push(`${exercise.targetWeight.toFixed(1)} ${exercise.unit}`);
+  if (displayWeight != null) {
+    telemetryParts.push(`${displayWeight.toFixed(1)} ${displayUnit}`);
   }
   if (exercise.targetRpe != null) {
     telemetryParts.push(`RPE ${exercise.targetRpe.toFixed(1)}`);
