@@ -1,15 +1,47 @@
-import { Zap, Clock, Timer, Dumbbell, Battery, MapPin, Activity } from "lucide-react";
-import { type DailyWorkoutPlan } from "@/types/agent";
+import { Clock, Timer, Dumbbell, Zap, Leaf, Briefcase, Home } from "lucide-react";
+import { type DailyWorkoutPlan, type AthleteState } from "@/types/agent";
 import ExerciseCard from "./exercise-card";
 
 interface DayCardViewProps {
   plan: DailyWorkoutPlan | null;
+  athleteState: AthleteState;
 }
 
 function modalityLabel(plan: DailyWorkoutPlan): string {
   const base = plan.modality.replace(/_/g, " ");
   if (plan.isGymClass) return `${base} // CLASS`;
   return base;
+}
+
+function getWorkModeLabel(
+  dateStr: string,
+  athleteState: AthleteState
+): { mode: string; commuteMinutes?: number } | null {
+  const dateObj = new Date(dateStr);
+  const weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayName = weekdayNames[dateObj.getDay()];
+  if (!dayName) return null;
+
+  // Find schedule matching dayName
+  // Keys might be uppercase or title case depending on athleteState/scenario
+  const scheduleKey = (Object.keys(athleteState.profile.weeklyWorkSchedule) as Array<
+    keyof typeof athleteState.profile.weeklyWorkSchedule
+  >).find((k) => k.toLowerCase() === dayName.toLowerCase());
+  if (!scheduleKey) return null;
+  const schedule = athleteState.profile.weeklyWorkSchedule[scheduleKey];
+  if (!schedule) return null;
+
+  return {
+    mode: schedule.mode === "WFO" ? "Work from Office" : "Work from Home",
+    commuteMinutes: schedule.commuteMinutesOneWay,
+  };
+}
+
+/* Sentence casing for LLM-authored text (e.g. nutrition advice) */
+function toSentenceCase(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return text;
+  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
 }
 
 function splitNutrition(advice: string): { pre: string; post: string } {
@@ -30,264 +62,254 @@ function splitNutrition(advice: string): { pre: string; post: string } {
   };
 }
 
-export default function DayCardView({ plan }: DayCardViewProps) {
-  /* ─── Empty State ──────────────────────────────────────────────────────── */
-  if (!plan) {
-    return (
+const glassCard =
+  "bg-zinc-950/40 backdrop-blur-xl border border-white/[0.07] rounded-2xl " +
+  "shadow-[0_8px_28px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.04)]";
+
+/* ─── Unified Rest / Active-Recovery Card ────────────────────────────────── */
+function RestRecoveryCard({ athleteState }: { athleteState: AthleteState }) {
+  const accentFrom = "#6366f1"; // Indigo accent for rest/recovery
+
+  return (
+    <div className={`relative ${glassCard} p-5 flex flex-col gap-4 overflow-hidden`}>
+      {/* Accent top line */}
       <div
-        className="relative rounded-3xl border border-zinc-800/60 p-8 flex flex-col items-center text-center gap-6 overflow-hidden"
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-px"
         style={{
-          background:
-            "linear-gradient(160deg, #0f1520 0%, #0c0f17 50%, #090d14 100%)",
-          boxShadow: "0 1px 0 0 rgba(255,255,255,0.03) inset, 0 20px 60px rgba(0,0,0,0.5)",
+          background: `linear-gradient(90deg, transparent 0%, ${accentFrom}55 40%, ${accentFrom}55 60%, transparent 100%)`,
         }}
-      >
-        {/* Ambient dot grid background decoration */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, #ffffff 1px, transparent 1px)",
-            backgroundSize: "24px 24px",
-          }}
-        />
+      />
 
-        {/* Animated icon container */}
-        <div
-          className="relative flex h-20 w-20 items-center justify-center rounded-3xl"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(124,58,237,0.12) 0%, rgba(124,58,237,0.04) 100%)",
-            border: "1px solid rgba(124,58,237,0.22)",
-            boxShadow: "0 0 32px rgba(124,58,237,0.14)",
-          }}
-        >
-          <Activity
-            size={36}
-            strokeWidth={1.5}
-            className="text-violet-400"
-            style={{ filter: "drop-shadow(0 0 8px rgba(124,58,237,0.5))" }}
-          />
-          {/* Pulse ring */}
-          <span
-            aria-hidden="true"
-            className="absolute inset-0 rounded-3xl animate-ping"
-            style={{
-              border: "1px solid rgba(124,58,237,0.18)",
-              animationDuration: "2.5s",
-            }}
-          />
-        </div>
-
-        {/* Copy */}
-        <div className="space-y-2 relative">
-          <h3 className="text-xl font-bold text-zinc-100 leading-tight">
-            No Protocol Scheduled
-          </h3>
-          <p className="font-mono text-[11px] tracking-widest text-zinc-600 uppercase">
-            No programmed protocol for this date
-          </p>
-          <p className="text-sm text-zinc-500 leading-relaxed max-w-[240px] mx-auto mt-1">
-            Ask the coach to generate an optimal training split for this week.
-          </p>
-        </div>
-
-        {/* Gradient CTA button */}
-        <button
-          id="generate-split-btn"
-          className="relative flex items-center gap-2.5 rounded-full px-7 py-3.5 text-sm font-bold text-white transition-all active:scale-95 overflow-hidden"
-          style={{
-            background:
-              "linear-gradient(135deg, #7c3aed 0%, #6d28d9 50%, #5b21b6 100%)",
-            boxShadow:
-              "0 0 20px rgba(124,58,237,0.45), 0 0 8px rgba(124,58,237,0.22), 0 4px 16px rgba(0,0,0,0.4)",
-          }}
-        >
-          {/* Button inner shimmer */}
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 rounded-full"
-            style={{
-              background:
-                "linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%)",
-            }}
-          />
-          <Zap size={15} strokeWidth={2.5} />
-          Generate Tactical Split
-        </button>
+      {/* Header */}
+      <div className="flex flex-col gap-1 min-w-0">
+        <span className="text-[10px] font-semibold tracking-wider text-zinc-400 uppercase">
+          Active Recovery &amp; Muscle Adaptation
+        </span>
+        <h2 className="text-2xl font-extrabold text-zinc-50 leading-tight tracking-tight">
+          Rest &amp; Active Recovery
+        </h2>
       </div>
-    );
-  }
 
-  /* ─── Populated ────────────────────────────────────────────────────────── */
-  const isRest = plan.modality === "REST" || plan.modality === "MOBILITY_RECOVERY";
+      {/* Bento grid */}
+      <div className="grid grid-cols-2 gap-2.5">
+        {/* Nutrition Target */}
+        <div className="rounded-xl bg-white/[0.03] border border-white/[0.05] p-3.5 flex flex-col gap-0.5">
+          <span className="text-[9px] font-bold tracking-wider text-zinc-500 uppercase">
+            Nutrition Target
+          </span>
+          <span className="text-base font-extrabold text-zinc-100 mt-0.5 leading-tight">
+            {athleteState.profile.targetDailyProteinGrams}g Protein
+          </span>
+          <span className="text-[10px] font-medium text-zinc-400 mt-1 leading-relaxed">
+            Baseline protein distribution today.
+          </span>
+        </div>
+
+        {/* Hydration */}
+        <div className="rounded-xl bg-white/[0.03] border border-white/[0.05] p-3.5 flex flex-col gap-0.5">
+          <span className="text-[9px] font-bold tracking-wider text-zinc-500 uppercase">
+            Hydration
+          </span>
+          <span className="text-base font-extrabold text-zinc-100 mt-0.5 leading-tight">
+            3.5L – 4.0L
+          </span>
+          <span className="text-[10px] font-medium text-zinc-400 mt-1 leading-relaxed">
+            Maintain baseline electrolyte balance.
+          </span>
+        </div>
+      </div>
+
+      {/* Mobility Routine */}
+      <div className="rounded-xl bg-white/[0.03] border border-white/[0.05] p-3.5 flex flex-col gap-0.5">
+        <span className="text-[9px] font-bold tracking-wider text-zinc-500 uppercase">
+          10-Minute Mobility Routine
+        </span>
+        <span className="text-base font-extrabold text-zinc-100 mt-0.5 leading-tight">
+          Daily Mobility Prompt
+        </span>
+        <span className="text-[10px] font-medium text-zinc-400 mt-1 leading-relaxed">
+          Light dynamic stretching and joint decompression movements.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Fuel & Recovery card (unified, cohesive) ───────────────────────────── */
+function NutritionCard({ plan }: { plan: DailyWorkoutPlan }) {
   const isCombat = plan.modality === "KICKBOXING" || plan.modality === "BJJ";
   const nutrition = splitNutrition(plan.nutritionAdvice);
 
-  /* Accent color per modality family */
-  const accentColor = isCombat
-    ? { from: "#f59e0b", to: "#d97706", glow: "rgba(245,158,11,0.3)" }
-    : isRest
-    ? { from: "#6366f1", to: "#4f46e5", glow: "rgba(99,102,241,0.3)" }
-    : { from: "#7c3aed", to: "#6d28d9", glow: "rgba(124,58,237,0.30)" };
+  return (
+    <div className={`${glassCard} p-4 flex flex-col gap-3`}>
+      {/* Header */}
+      <div className="flex items-center gap-2 px-1">
+        <span className="font-mono text-[10px] tracking-widest text-zinc-400 uppercase">
+          Fuel &amp; Recovery
+        </span>
+      </div>
+
+      {/* Pre-Fuel */}
+      <div className="flex items-start gap-3 px-1">
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-400/10 border border-amber-400/20">
+          <Zap size={13} strokeWidth={2.5} className="text-amber-300" />
+        </span>
+        <div className="min-w-0 flex flex-col gap-0.5">
+          <span className="text-[10px] font-mono tracking-wider text-zinc-400 uppercase font-semibold">
+            Pre-Fuel
+          </span>
+          <p className="text-xs text-zinc-200 leading-relaxed">
+            {toSentenceCase(nutrition.pre || plan.nutritionAdvice)}
+          </p>
+        </div>
+      </div>
+
+      <div className="border-t border-white/[0.06]" />
+
+      {/* Post-Recovery */}
+      <div className="flex items-start gap-3 px-1">
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-400/10 border border-emerald-400/20">
+          <Leaf size={13} strokeWidth={2.5} className="text-emerald-300" />
+        </span>
+        <div className="min-w-0 flex flex-col gap-0.5">
+          <span className="text-[10px] font-mono tracking-wider text-zinc-400 uppercase font-semibold">
+            Post-Recovery
+          </span>
+          <p className="text-xs text-zinc-200 leading-relaxed">
+            {toSentenceCase(
+              nutrition.post
+                ? nutrition.post
+                : isCombat
+                ? "35g Whey + Electrolytes"
+                : "40g Whey Protein + Casein PM"
+            )}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function DayCardView({ plan, athleteState }: DayCardViewProps) {
+  /* ─── Empty State → unified rest card ──────────────────────────────────── */
+  if (!plan) {
+    return <RestRecoveryCard athleteState={athleteState} />;
+  }
+
+  /* ─── Populated ─────────────────────────────────────────────────────────── */
+  const isRest = plan.modality === "REST" || plan.modality === "MOBILITY_RECOVERY";
+  const isCombat = plan.modality === "KICKBOXING" || plan.modality === "BJJ";
+  const workMode = getWorkModeLabel(plan.date, athleteState);
+
+  /* Accent top-line colour per modality family */
+  const accentFrom = isCombat ? "#f59e0b" : isRest ? "#6366f1" : "#7c3aed";
+
+  const isWfo = workMode?.mode === "Work from Office";
 
   return (
     <div className="flex flex-col gap-3">
 
       {/* ─── Hero Session Card ──────────────────────────────────────────── */}
-      <div
-        className="relative rounded-3xl border border-zinc-800/60 p-5 overflow-hidden"
-        style={{
-          background: "linear-gradient(160deg, #111520 0%, #0c0f17 100%)",
-          boxShadow: `0 0 40px ${accentColor.glow}, 0 1px 0 0 rgba(255,255,255,0.04) inset, 0 16px 40px rgba(0,0,0,0.5)`,
-        }}
-      >
+      <div className={`relative ${glassCard} p-5 overflow-hidden`}>
         {/* Accent top line */}
         <div
           aria-hidden="true"
           className="absolute inset-x-0 top-0 h-px"
           style={{
-            background: `linear-gradient(90deg, transparent 0%, ${accentColor.from}55 40%, ${accentColor.from}55 60%, transparent 100%)`,
+            background: `linear-gradient(90deg, transparent 0%, ${accentFrom}55 40%, ${accentFrom}55 60%, transparent 100%)`,
           }}
         />
 
-        {/* Top row */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex flex-col gap-1 min-w-0">
-            {/* Modality label: mono accent */}
-            <span className="font-mono text-[10px] tracking-[0.18em] text-zinc-500 uppercase">
-              {modalityLabel(plan)}
-            </span>
-            {/* Focus headline: display font, generous size */}
-            <h2 className="text-xl font-extrabold text-zinc-50 leading-tight">
-              {plan.focus}
-            </h2>
-          </div>
+        {/* Top Header Row: Modality & Solid Pills */}
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-[10px] font-semibold tracking-wider text-zinc-400 uppercase">
+            {modalityLabel(plan)}
+          </span>
 
-          <div className="flex flex-col items-end gap-2 shrink-0">
+          <div className="flex items-center gap-1.5">
             {plan.isGymClass && (
-              <span
-                className="rounded-full px-3 py-1 font-mono text-[10px] font-bold uppercase tracking-wider text-amber-300"
-                style={{
-                  background: "rgba(245,158,11,0.1)",
-                  border: "1px solid rgba(245,158,11,0.3)",
-                  boxShadow: "0 0 8px rgba(245,158,11,0.15)",
-                }}
-              >
-                GYM CLASS
+              <span className="shrink-0 bg-amber-500 text-amber-950 font-bold px-2 py-0.5 rounded-full text-[9px] tracking-wider uppercase">
+                CLASS
               </span>
             )}
-            <span className="font-mono text-xs tabular-nums text-zinc-500">
-              {plan.plannedTime} IST
-            </span>
+            {workMode && (
+              <span className={`shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full font-bold text-[9px] tracking-wider uppercase ${
+                isWfo ? "bg-white text-zinc-950" : "bg-zinc-800 text-zinc-300"
+              }`}>
+                {isWfo ? (
+                  <>
+                    <Briefcase size={9} strokeWidth={2.5} />
+                    WFO {workMode.commuteMinutes != null ? `· ${workMode.commuteMinutes}M` : ""}
+                  </>
+                ) : (
+                  <>
+                    <Home size={9} strokeWidth={2.5} />
+                    WFH
+                  </>
+                )}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Sub-row: telemetry chips */}
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-zinc-800/40 pt-4">
+        {/* Main Focus / Title */}
+        <div className="mt-3.5 mb-5">
+          <h2 className="text-2xl font-extrabold text-zinc-50 leading-tight tracking-tight">
+            {plan.focus}
+          </h2>
+        </div>
+
+        {/* Bento stats row (inspired by Image 2's column cards) */}
+        <div className="grid grid-cols-2 gap-2.5 border-t border-white/[0.06] pt-4">
           {plan.estimatedDurationMinutes && (
-            <span
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-mono text-[11px] text-zinc-400 tabular-nums"
-              style={{ background: "#111520", border: "1px solid rgba(63,63,70,0.6)" }}
-            >
-              <Timer size={11} strokeWidth={2} className="text-zinc-600" />
-              {plan.estimatedDurationMinutes} MIN
-            </span>
+            <div className="bg-white/[0.03] border border-white/[0.05] rounded-xl p-3 flex flex-col gap-0.5">
+              <span className="text-[9px] font-bold tracking-wider text-zinc-500 uppercase flex items-center gap-1">
+                <Timer size={10} className="text-zinc-500" />
+                Duration
+              </span>
+              <div className="flex items-baseline gap-0.5 mt-0.5">
+                <span className="text-lg font-extrabold text-zinc-100 tabular-nums">
+                  {plan.estimatedDurationMinutes}
+                </span>
+                <span className="text-[10px] font-semibold text-zinc-400 uppercase">
+                  MIN
+                </span>
+              </div>
+            </div>
           )}
-          <span
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 font-mono text-[11px] text-zinc-400 tabular-nums"
-            style={{ background: "#111520", border: "1px solid rgba(63,63,70,0.6)" }}
-          >
-            <Clock size={11} strokeWidth={2} className="text-zinc-600" />
-            {plan.plannedTime}
-          </span>
-          {plan.isGymClass && (
-            <span
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] text-zinc-500"
-              style={{ background: "#111520", border: "1px solid rgba(63,63,70,0.6)" }}
-            >
-              <MapPin size={11} strokeWidth={2} className="text-zinc-600" />
-              {plan.focus}
+
+          <div className="bg-white/[0.03] border border-white/[0.05] rounded-xl p-3 flex flex-col gap-0.5">
+            <span className="text-[9px] font-bold tracking-wider text-zinc-500 uppercase flex items-center gap-1">
+              <Clock size={10} className="text-zinc-500" />
+              Start Time
             </span>
-          )}
+            <div className="flex items-baseline gap-0.5 mt-0.5">
+              <span className="text-lg font-extrabold text-zinc-100 tabular-nums">
+                {plan.plannedTime}
+              </span>
+              <span className="text-[10px] font-semibold text-zinc-400 uppercase">
+                IST
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* ─── Rest Day ──────────────────────────────────────────────────── */}
       {isRest ? (
-        <div
-          className="rounded-3xl border border-zinc-800/60 p-8 flex flex-col items-center text-center gap-4"
-          style={{
-            background: "linear-gradient(160deg, #111520 0%, #0c0f17 100%)",
-            boxShadow: "0 0 32px rgba(99,102,241,0.08)",
-          }}
-        >
-          <div
-            className="flex h-14 w-14 items-center justify-center rounded-2xl"
-            style={{
-              background: "rgba(99,102,241,0.08)",
-              border: "1px solid rgba(99,102,241,0.2)",
-            }}
-          >
-            <Battery size={24} strokeWidth={1.5} className="text-indigo-400" />
-          </div>
-          <div className="space-y-1.5">
-            <h3 className="text-base font-bold text-zinc-200">Rest &amp; Active Recovery</h3>
-            <p className="text-xs text-zinc-500 leading-relaxed max-w-[240px]">
-              No prescribed heavy resistance training today. Focus on sleep, mobility, and recovery.
-            </p>
-          </div>
-        </div>
+        <RestRecoveryCard athleteState={athleteState} />
       ) : (
         <>
-          {/* ─── Nutrition Bento ─────────────────────────────────────── */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* PRE-FUEL */}
-            <div
-              className="rounded-2xl p-4 flex flex-col gap-2.5"
-              style={{
-                background:
-                  "linear-gradient(135deg, rgba(124,58,237,0.09) 0%, #0c0f17 100%)",
-                border: "1px solid rgba(124,58,237,0.20)",
-              }}
-            >
-              <span className="font-mono text-[10px] tracking-widest text-violet-400 uppercase">
-                Pre-Fuel
-              </span>
-              <p className="text-xs text-zinc-300 leading-relaxed font-medium">
-                {nutrition.pre || plan.nutritionAdvice}
-              </p>
-            </div>
-
-            {/* POST-RECOVERY */}
-            <div
-              className="rounded-2xl p-4 flex flex-col gap-2.5"
-              style={{
-                background:
-                  "linear-gradient(135deg, rgba(56,189,248,0.07) 0%, #0c0f17 100%)",
-                border: "1px solid rgba(56,189,248,0.15)",
-              }}
-            >
-              <span className="font-mono text-[10px] tracking-widest text-sky-400 uppercase">
-                Post-Recovery
-              </span>
-              <p className="text-xs text-zinc-300 leading-relaxed font-medium">
-                {nutrition.post
-                  ? nutrition.post
-                  : isCombat
-                  ? "35g Whey + Electrolytes"
-                  : "40g Whey Protein + Casein PM"}
-              </p>
-            </div>
-          </div>
+          {/* ─── Fuel & Recovery ────────────────────────────────────── */}
+          <NutritionCard plan={plan} />
 
           {/* ─── Exercise Deck ───────────────────────────────────────── */}
           {plan.exercises && plan.exercises.length > 0 && (
             <div className="flex flex-col gap-1.5">
               <div className="flex items-center gap-2 px-1 mb-0.5">
-                <Dumbbell size={11} className="text-zinc-600" strokeWidth={2.5} />
-                <span className="font-mono text-[10px] tracking-widest text-zinc-600 uppercase">
+                <Dumbbell size={11} className="text-zinc-400" strokeWidth={2.5} />
+                <span className="font-mono text-[10px] tracking-widest text-zinc-400 uppercase">
                   Prescribed Exercises
                 </span>
               </div>
@@ -301,7 +323,7 @@ export default function DayCardView({ plan }: DayCardViewProps) {
           )}
 
           {plan.exercises && plan.exercises.length === 0 && (
-            <p className="text-xs text-zinc-600 italic px-1 py-2">
+            <p className="text-xs text-zinc-400 italic px-1 py-2">
               No exercises listed for this modality.
             </p>
           )}
