@@ -13,13 +13,14 @@ export class OpenCodeZenProvider implements LLMProvider {
   constructor(options?: { apiKey?: string; baseUrl?: string; defaultModel?: string }) {
     this.apiKey =
       options?.apiKey ||
-      process.env.OPENCODE_API_KEY ||
       process.env.LLM_API_KEY ||
+      process.env.OPENCODE_API_KEY ||
       "";
     this.baseUrl =
       options?.baseUrl ||
+      process.env.LLM_BASE_URL ||
       process.env.OPENCODE_BASE_URL ||
-      "https://opencode.zen/v1";
+      "https://opencode.ai/zen/v1";
     this.defaultModel =
       options?.defaultModel ||
       process.env.LLM_MODEL ||
