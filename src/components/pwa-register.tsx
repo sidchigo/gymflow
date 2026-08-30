@@ -18,6 +18,18 @@ export function PWARegister() {
           console.error("Service Worker registration failed:", err);
         });
     }
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      (window as any).deferredPrompt = e;
+      window.dispatchEvent(new CustomEvent("pwa-installable"));
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    };
   }, []);
 
   return null;
