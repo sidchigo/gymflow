@@ -554,7 +554,7 @@ export async function runCoachAgentStream(params: {
   }) => void;
 }): Promise<AgentResult> {
   const { userId, userMessage, chatHistory = [], model, onEvent } = params;
-  const provider = params.provider || new GeminiLLMProvider();
+  const provider = params.provider || getDefaultLLMProvider();
 
   // 1. Resolve current week and dates
   const now = new Date();
@@ -643,6 +643,9 @@ export async function runCoachAgentStream(params: {
     let text = "";
     let toolCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
 
+    if (!provider.generateCompletionStream) {
+      throw new Error("Active LLM provider does not support completion streaming");
+    }
     const generator = provider.generateCompletionStream(completionParams);
     for await (const chunk of generator) {
       if (chunk.text) {

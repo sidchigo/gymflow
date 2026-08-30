@@ -179,4 +179,16 @@ function lowercaseSchemaTypes(schema: any): any {
 
     return result;
   }
+
+  async *generateCompletionStream(params: {
+    messages: LLMMessage[];
+    tools?: LLMToolDefinition[];
+    model?: string;
+  }): AsyncGenerator<{
+    text?: string | undefined;
+    toolCalls?: Array<{ name: string; args: Record<string, unknown> }> | undefined;
+  }> {
+    const result = await this.generateCompletion(params);
+    yield result;
+  }
 }
