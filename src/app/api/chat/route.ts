@@ -41,9 +41,35 @@ export async function POST(request: NextRequest): Promise<Response> {
         });
       } catch (err: any) {
         console.error(`[api/chat] error in agent stream for userId=${userId}:`, err);
+        
+        let displayError = "An unexpected error occurred during execution.";
+        const rawMessage = err?.message || "";
+        
+        if (
+          rawMessage.includes("RESOURCE_EXHAUSTED") || 
+          rawMessage.includes("quota exceeded") || 
+          rawMessage.includes("429")
+        ) {
+          displayError = "Rate limit or API quota exceeded. Please try again in a few moments.";
+        } else {
+          try {
+            // Attempt to parse JSON error structure if returned as a string
+            const parsed = JSON.parse(rawMessage);
+            if (parsed?.error?.message) {
+              displayError = parsed.error.message;
+            } else if (parsed?.message) {
+              displayError = parsed.message;
+            }
+          } catch {
+            if (typeof rawMessage === "string" && rawMessage.trim()) {
+              displayError = rawMessage;
+            }
+          }
+        }
+
         const errEvent = JSON.stringify({
           type: "text",
-          text: `\n\n[Coach System Error: ${err.message || "An unexpected error occurred during execution."}]`,
+          text: `\n\n[Coach System Error: ${displayError}]`,
         }) + "\n";
         controller.enqueue(encoder.encode(errEvent));
       } finally {
