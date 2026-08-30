@@ -11,6 +11,7 @@ interface CoachPanelProps {
   executingTool: string | null;
   onSendMessage: (message: string) => void;
   disabled?: boolean;
+  isGenerating?: boolean;
 }
 
 interface CoachSheetProps extends CoachPanelProps {
@@ -26,53 +27,12 @@ export function CoachSidebarPanel({
   executingTool,
   onSendMessage,
   disabled = false,
+  isGenerating = false,
 }: CoachPanelProps) {
   return (
-    <div
-      className="flex flex-col h-[calc(100dvh-3rem)] rounded-3xl overflow-hidden"
-      style={{
-        background: "linear-gradient(160deg, #0f1420 0%, #0c0f17 60%, #0a0d14 100%)",
-        border: "1px solid rgba(63,63,70,0.5)",
-        boxShadow:
-          "0 1px 0 0 rgba(255,255,255,0.04) inset, 0 24px 64px rgba(0,0,0,0.6)",
-      }}
-    >
-      {/* ─── Panel Header ────────────────────────────────────────────── */}
-      <div
-        className="shrink-0 flex items-center justify-between px-5 py-4"
-        style={{ borderBottom: "1px solid rgba(63,63,70,0.4)" }}
-      >
-        <div className="flex flex-col gap-0.5">
-          {/* Section label: mono accent */}
-          <span className="font-mono text-[10px] tracking-widest text-zinc-600 uppercase">
-            Coach Copilot
-          </span>
-          {/* Title: display font */}
-          <span className="text-sm font-bold text-zinc-200 leading-tight">
-            S&amp;C &amp; Combat Intelligence
-          </span>
-        </div>
-
-        {/* Glowing ACTIVE status pill */}
-        <span
-          className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-bold text-violet-300"
-          style={{
-            background: "rgba(124,58,237,0.12)",
-            border: "1px solid rgba(124,58,237,0.32)",
-            boxShadow:
-              "0 0 12px rgba(124,58,237,0.28), 0 0 4px rgba(124,58,237,0.16)",
-          }}
-        >
-          <span
-            className="h-1.5 w-1.5 rounded-full bg-violet-400 animate-pulse"
-            style={{ boxShadow: "0 0 6px rgba(167,139,250,0.8)" }}
-          />
-          ACTIVE
-        </span>
-      </div>
-
+    <div className="flex flex-col h-[calc(100vh-9rem)] overflow-hidden">
       {/* ─── Scrollable Messages ─────────────────────────────────────── */}
-      <MessageStream messages={messages} executingTool={executingTool} />
+      <MessageStream messages={messages} executingTool={executingTool} isGenerating={isGenerating} />
 
       {/* ─── Sticky Input ────────────────────────────────────────────── */}
       <ChatInput onSendMessage={onSendMessage} disabled={disabled} />
@@ -89,6 +49,7 @@ export default function CoachSheet({
   executingTool,
   onSendMessage,
   disabled = false,
+  isGenerating = false,
 }: Omit<CoachSheetProps, "onOpen">) {
   return (
     <>
@@ -149,9 +110,8 @@ export default function CoachSheet({
             Minimize
           </button>
 
-          {/* Title: display font not mono */}
           <span className="text-sm font-bold text-zinc-300 select-none">
-            Coach AI
+            {/* Mockup matching empty center title */}
           </span>
 
           <button
@@ -166,7 +126,7 @@ export default function CoachSheet({
         </div>
 
         {/* Messages */}
-        <MessageStream messages={messages} executingTool={executingTool} />
+        <MessageStream messages={messages} executingTool={executingTool} isGenerating={isGenerating} />
 
         {/* Input */}
         <ChatInput onSendMessage={onSendMessage} disabled={disabled} />
