@@ -156,7 +156,7 @@ export const DailyWorkoutPlanSchema = z.object({
   isGymClass: z.boolean(),
   gymSlotId: z.string().optional().nullable(),
   plannedTime: z.string().regex(/^\d{2}:\d{2}$/), // HH:mm
-  estimatedDurationMinutes: z.number().positive().optional().nullable(),
+  estimatedDurationMinutes: z.number().nonnegative().optional().nullable(),
   exercises: z.array(PlannedExerciseSchema),
   nutritionAdvice: z.string(),
 });
@@ -183,7 +183,7 @@ export const ReplanWeekScheduleArgsSchema = z.object({
       isGymClass: z.boolean(),
       gymSlotId: z.string().optional().nullable(),
       plannedTime: z.string().regex(/^\d{2}:\d{2}$/),
-      estimatedDurationMinutes: z.number().positive().optional().nullable(),
+      estimatedDurationMinutes: z.number().nonnegative().optional().nullable(),
       exercises: z.array(PlannedExerciseSchema),
       nutritionAdvice: z.string(),
     })
