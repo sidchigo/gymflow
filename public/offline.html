@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline — GymFlow</title>
+  <style>
+    :root {
+      --background: #0a0014;
+      --foreground: #f1f5f9;
+      --accent: #7c3aed;
+      --accent-bright: #8b5cf6;
+      --surface-1: #0f0020;
+      --surface-2: #150030;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--background);
+      background-image:
+        radial-gradient(ellipse 80% 60% at 50% -10%, rgba(109, 40, 217, 0.55) 0%, transparent 70%),
+        radial-gradient(ellipse 50% 40% at 50% 0%, rgba(124, 58, 237, 0.3) 0%, transparent 60%);
+      background-attachment: fixed;
+      color: var(--foreground);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      box-sizing: border-box;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .container {
+      max-width: 480px;
+      background: rgba(15, 0, 32, 0.6);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(124, 58, 237, 0.2);
+      border-radius: 24px;
+      padding: 40px 32px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    .icon-wrapper {
+      width: 80px;
+      height: 80px;
+      margin: 0 auto 24px;
+      background: rgba(124, 58, 237, 0.1);
+      border: 1.5px solid var(--accent);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-bright);
+    }
+
+    .icon-wrapper svg {
+      width: 40px;
+      height: 40px;
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 800;
+      margin: 0 0 12px;
+      letter-spacing: -0.5px;
+    }
+
+    p {
+      color: #94a3b8;
+      font-size: 15px;
+      line-height: 1.6;
+      margin: 0 0 32px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      box-shadow: 0 0 15px rgba(124, 58, 237, 0.4);
+    }
+
+    .btn:hover {
+      background: var(--accent-bright);
+      transform: translateY(-1px);
+      box-shadow: 0 0 20px rgba(124, 58, 237, 0.6);
+    }
+
+    .btn:active {
+      transform: translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon-wrapper">
+      <!-- Wifi Off Icon -->
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M20.022 12c-.52-1.747-1.428-3.324-2.612-4.613m-2.906-2.906A10.443 10.443 0 0012 4.5c-4.756 0-8.773 3.162-10.065 7.498a11.083 11.083 0 00.999 5.864m18.131-4.362A10.477 10.477 0 0022.066 12C20.774 7.662 16.756 4.5 12 4.5c-.993 0-1.953.138-2.863.395m10.885 7.105a9.07 9.07 0 01-.482 1.636m-1.776-1.776a9.043 9.043 0 00-1.442-1.442M1 1l22 22" />
+      </svg>
+    </div>
+    <h1>You are offline</h1>
+    <p>It looks like you've lost your network connection. GymFlow requires an active internet connection to synchronize schedules and chat with your coaching copilot, but you can try reloading once you are back online.</p>
+    <button class="btn" onclick="window.location.reload()">Retry Connection</button>
+  </div>
+</body>
+</html>
