@@ -35,10 +35,11 @@ export default function WeekStrip({
           <span className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">
             TRAINING WEEK
           </span>
-          <div className="flex items-center gap-2.5 bg-zinc-950/20 backdrop-blur-md border border-zinc-900/50 rounded-full px-3 py-1 text-xs">
+        <div className="flex items-center gap-2.5 bg-zinc-950/20 backdrop-blur-md border border-zinc-900/50 rounded-full px-3 py-1 text-xs">
             <button
               onClick={onPrevWeek}
-              className="text-zinc-400 hover:text-zinc-100 font-bold px-1 select-none transition-colors cursor-pointer outline-none"
+              aria-label="Previous week"
+              className="flex min-w-9 h-9 items-center justify-center rounded-full text-zinc-400 hover:text-zinc-100 font-bold select-none transition-colors cursor-pointer outline-none"
             >
               &lt;
             </button>
@@ -47,7 +48,8 @@ export default function WeekStrip({
             </span>
             <button
               onClick={onNextWeek}
-              className="text-zinc-400 hover:text-zinc-100 font-bold px-1 select-none transition-colors cursor-pointer outline-none"
+              aria-label="Next week"
+              className="flex min-w-9 h-9 items-center justify-center rounded-full text-zinc-400 hover:text-zinc-100 font-bold select-none transition-colors cursor-pointer outline-none"
             >
               &gt;
             </button>

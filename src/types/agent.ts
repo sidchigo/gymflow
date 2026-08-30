@@ -15,6 +15,9 @@ import { z } from "zod";
 export const WorkModeSchema = z.enum(["WFH", "WFO"]);
 export type WorkMode = z.infer<typeof WorkModeSchema>;
 
+export const TrainingTimePreferenceSchema = z.enum(["MORNING", "EVENING", "BOTH"]);
+export type TrainingTimePreference = z.infer<typeof TrainingTimePreferenceSchema>;
+
 export const DietPreferenceSchema = z.enum([
   "HIGH_PROTEIN_NON_VEG",
   "HIGH_PROTEIN_VEG",
@@ -72,6 +75,9 @@ export const AthleteProfileSchema = z.object({
   modalities: z.array(ModalitySchema),
   dietaryPreference: DietPreferenceSchema,
   targetDailyProteinGrams: z.number().positive(),
+  workDayStartTime: z.string().regex(/^\d{2}:\d{2}$/).optional().default("09:00"),
+  workDayEndTime: z.string().regex(/^\d{2}:\d{2}$/).optional().default("18:00"),
+  trainingTimePreference: TrainingTimePreferenceSchema.optional().default("BOTH"),
 });
 export type AthleteProfile = z.infer<typeof AthleteProfileSchema>;
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import WeekStrip from "@/components/mobile/week-strip";
 import DayCardView from "@/components/mobile/day-card-view";
@@ -30,6 +30,54 @@ function getMondayOfISOWeek(year: number, week: number): Date {
   return ISOweekStart;
 }
 
+function diffStorageKey(weekNumber: string): string {
+  return `gymflow:dismissed-diff:${weekNumber}`;
+}
+
+function readDismissedDiff(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    // localStorage may be unavailable (SSR, private mode)
+    return null;
+  }
+}
+
+function writeDismissedDiff(key: string, detectedAt: string | null) {
+  try {
+    if (detectedAt) {
+      window.localStorage.setItem(key, detectedAt);
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  } catch {
+    // localStorage may be unavailable (SSR, private mode)
+  }
+}
+
+// Latest detection timestamp across all diffs for display consideration
+function latestDiffDetectedAt(diffs: { detectedAt: string }[]): string | null {
+  let latest: string | null = null;
+  for (const diff of diffs) {
+    if (!latest || diff.detectedAt > latest) latest = diff.detectedAt;
+  }
+  return latest;
+}
+
+interface DayPillResult {
+  dayAbbrev: string;
+  dateNum: number;
+  fullDate: string;
+  dotStatus: string;
+}
+
+function autoSelectDate(weekDays: DayPillResult[]): string {
+  const todayIST = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const today = weekDays.find((d) => d.fullDate === todayIST);
+  if (today) return today.fullDate;
+  return weekDays[0]?.fullDate ?? "";
+}
+
 export default function DashboardClient({
   initialSchedule,
   initialPlan,
@@ -37,14 +85,54 @@ export default function DashboardClient({
   athleteState,
 }: DashboardClientProps) {
   const router = useRouter();
-  const [selectedDate, setSelectedDate] = useState<string>("");
   const [schedule] = useState<WeeklyScheduleStore>(initialSchedule);
   const [plan] = useState<WeeklyWorkoutPlan | null>(initialPlan);
 
-  const [dismissedDiffs, setDismissedDiffs] = useState(false);
+  const weekNumber = (() => {
+    if (activeWeek) {
+      const parts = activeWeek.replace("_", "-").split("-");
+      const week = parseInt(parts[1]?.replace("W", "") ?? "", 10);
+      if (!isNaN(week)) return String(week);
+    }
+    return "";
+  })();
+
+  const STORAGE_KEY = diffStorageKey(weekNumber);
+
+  // Latest change timestamp across the diff log (resets per week via weekData timestamp)
+  const latestDetectedAt = latestDiffDetectedAt(schedule.diffs);
+
+  // Store which diff we've already acknowledged, so a NEW reschedule/cancel re-surfaces.
+  const [dismissedState, setDismissedState] = useState<{
+    week: string;
+    dismissedAt: string | null;
+  }>(() => ({
+    week: weekNumber,
+    dismissedAt: readDismissedDiff(STORAGE_KEY),
+  }));
+
+  // Adjust state during render when the active week changes (supported React pattern)
+  if (dismissedState.week !== weekNumber) {
+    setDismissedState({
+      week: weekNumber,
+      dismissedAt: readDismissedDiff(diffStorageKey(weekNumber)),
+    });
+  }
+
+  const dismissedAt = dismissedState.dismissedAt;
+  const setDismissedDiffs = () =>
+    setDismissedState({ week: weekNumber, dismissedAt: latestDetectedAt });
+
+  // Banner shows when there are diffs AND the latest change is newer than what we dismissed
+  const showDiffAlert = !!(schedule.diffs.length > 0 && (!dismissedAt || (latestDetectedAt && latestDetectedAt > dismissedAt)));
+
+  // Persist the dismissed timestamp for the current week whenever it changes
+  useEffect(() => {
+    writeDismissedDiff(STORAGE_KEY, dismissedAt);
+  }, [dismissedAt, weekNumber, STORAGE_KEY]);
 
   // Derive target Monday based on activeWeek prop (e.g. "2026_W35" or "2026-W35")
-  const mondayDate = (() => {
+  const mondayDate = useMemo(() => {
     if (activeWeek) {
       const parts = activeWeek.replace("_", "-").split("-");
       const year = parseInt(parts[0] ?? "", 10);
@@ -59,21 +147,10 @@ export default function DashboardClient({
     const monday = new Date(now);
     monday.setDate(now.getDate() + distanceToMonday);
     return monday;
-  })();
-
-  // Set initial selected date to active week's Monday or today if it's the active week
-  useEffect(() => {
-    const todayIST = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-    const isTodayInActiveWeek = weekDays.some((d) => d.fullDate === todayIST);
-    if (isTodayInActiveWeek) {
-      setSelectedDate(todayIST);
-    } else if (weekDays.length > 0 && weekDays[0]) {
-      setSelectedDate(weekDays[0].fullDate);
-    }
   }, [activeWeek]);
 
   // Compute 7 days of active week (Mon → Sun)
-  const weekDays = (() => {
+  const weekDays = useMemo(() => {
     const dates = [];
     const dayAbbrevs = ["M", "T", "W", "T", "F", "S", "S"];
 
@@ -113,7 +190,25 @@ export default function DashboardClient({
       });
     }
     return dates;
-  })();
+  }, [mondayDate, schedule, plan]);
+
+  // Selected day: defaults to today (if in the active week) else the week's Monday.
+  // Derived via render-adjustment so it resets whenever the active week changes.
+  const [selectedDateState, setSelectedDateState] = useState<{
+    week: string;
+    date: string;
+  }>(() => ({
+    week: activeWeek ?? "",
+    date: autoSelectDate(weekDays),
+  }));
+
+  if (selectedDateState.week !== (activeWeek ?? "")) {
+    setSelectedDateState({ week: activeWeek ?? "", date: autoSelectDate(weekDays) });
+  }
+
+  const selectedDate = selectedDateState.date;
+  const setSelectedDate = (date: string) =>
+    setSelectedDateState({ week: activeWeek ?? "", date });
 
   const handlePrevWeek = () => {
     if (activeWeek) {
@@ -128,7 +223,7 @@ export default function DashboardClient({
           prevYear -= 1;
         }
         const prevWeekStr = `${prevYear}_W${String(prevWeek).padStart(2, "0")}`;
-        router.push(`/?week=${prevWeekStr}`);
+        router.replace(`/?week=${prevWeekStr}`, { scroll: false });
       }
     }
   };
@@ -146,40 +241,29 @@ export default function DashboardClient({
           nextYear += 1;
         }
         const nextWeekStr = `${nextYear}_W${String(nextWeek).padStart(2, "0")}`;
-        router.push(`/?week=${nextWeekStr}`);
+        router.replace(`/?week=${nextWeekStr}`, { scroll: false });
       }
     }
   };
 
   const activeDayWorkout = plan?.plan.find((p) => p.date === selectedDate) ?? null;
 
-  const weekNumber = (() => {
-    if (activeWeek) {
-      const parts = activeWeek.replace("_", "-").split("-");
-      const week = parseInt(parts[1]?.replace("W", "") ?? "", 10);
-      if (!isNaN(week)) return String(week);
-    }
-    return "";
-  })();
-
   const handleNavigateToCoach = () => {
-    setDismissedDiffs(true);
+    setDismissedDiffs();
     router.push(
       "/coach?prompt=Sync%20and%20update%20my%20schedule%20with%20the%20new%20gym%20timetable"
     );
   };
 
-
-
   return (
     <div className="flex-1 flex flex-col">
       <div className="flex-1 px-4 pt-4 pb-28 flex flex-col gap-4 max-w-xl lg:max-w-4xl mx-auto w-full lg:px-6 lg:py-6 lg:pb-6">
-        {!dismissedDiffs && schedule.diffs.length > 0 && (
+        {showDiffAlert && (
           <ScheduleDiffAlert
             diffCount={schedule.diffs.length}
             weekNumber={weekNumber}
             onNavigateToCoach={handleNavigateToCoach}
-            onDismiss={() => setDismissedDiffs(true)}
+            onDismiss={() => setDismissedDiffs()}
           />
         )}
         <WeekStrip

@@ -7,6 +7,7 @@ import {
   type Modality,
   type DietPreference,
   type WeightUnit,
+  type TrainingTimePreference,
 } from "@/types/agent";
 
 interface ProfileSettingsScreenProps {
@@ -53,6 +54,12 @@ const DIET_OPTIONS: readonly { value: DietPreference; label: string }[] = [
   { value: "HIGH_PROTEIN_NON_VEG", label: "Non-Veg" },
   { value: "HIGH_PROTEIN_VEG", label: "Veg" },
   { value: "BALANCED", label: "Balanced" },
+] as const;
+
+const TRAINING_TIME_OPTIONS: readonly { value: TrainingTimePreference; label: string }[] = [
+  { value: "MORNING", label: "Morning" },
+  { value: "EVENING", label: "Evening" },
+  { value: "BOTH", label: "Both" },
 ] as const;
 
 const UNIT_OPTIONS: readonly { value: WeightUnit; label: string }[] = [
@@ -209,6 +216,16 @@ export default function ProfileSettingsScreen({
     ]
   );
 
+  const [workDayStartTime, setWorkDayStartTime] = useState<string>(
+    initialProfile?.workDayStartTime ?? "09:00"
+  );
+  const [workDayEndTime, setWorkDayEndTime] = useState<string>(
+    initialProfile?.workDayEndTime ?? "18:00"
+  );
+  const [trainingTimePreference, setTrainingTimePreference] = useState<
+    TrainingTimePreference
+  >(initialProfile?.trainingTimePreference ?? "BOTH");
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -276,6 +293,9 @@ export default function ProfileSettingsScreen({
       modalities: selectedModalities,
       dietaryPreference: diet,
       targetDailyProteinGrams: protein,
+      workDayStartTime,
+      workDayEndTime,
+      trainingTimePreference,
     };
 
     try {
@@ -525,6 +545,53 @@ export default function ProfileSettingsScreen({
 
           {/* Right Column: Daily Work Schedule */}
           <div className="lg:col-span-7 flex flex-col gap-6">
+            {/* ── Work Hours & Training Time ───────────────────────────── */}
+            <section className="space-y-3 pb-3">
+              <div className="flex items-center gap-1.5 pb-1">
+                <Clock size={12} className="text-zinc-500" />
+                <h3 className="font-mono text-[9px] tracking-widest text-zinc-500 uppercase font-bold">
+                  Work Hours & Training Window
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label htmlFor="settings-work-start" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
+                    Work Start
+                  </label>
+                  <input
+                    id="settings-work-start"
+                    type="time"
+                    value={workDayStartTime}
+                    onChange={(e) => setWorkDayStartTime(e.target.value)}
+                    className="w-full h-10 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 font-mono text-xs text-zinc-100 outline-none focus:border-zinc-700 transition-all tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="settings-work-end" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
+                    Work End
+                  </label>
+                  <input
+                    id="settings-work-end"
+                    type="time"
+                    value={workDayEndTime}
+                    onChange={(e) => setWorkDayEndTime(e.target.value)}
+                    className="w-full h-10 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 font-mono text-xs text-zinc-100 outline-none focus:border-zinc-700 transition-all tabular-nums"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <span className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
+                  Prefer Training
+                </span>
+                <SegmentedToggle
+                  id="settings-training-time"
+                  options={TRAINING_TIME_OPTIONS}
+                  value={trainingTimePreference}
+                  onChange={setTrainingTimePreference}
+                />
+              </div>
+            </section>
+
             {/* ── Daily Work Schedule Matrix (Mon–Sun) ─────────────────── */}
             <section className="space-y-3 pb-3">
               <div className="flex items-center gap-1.5 pb-1">
