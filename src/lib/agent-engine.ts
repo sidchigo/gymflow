@@ -260,6 +260,7 @@ ATHLETIC REASONING & PERIODIZATION RULES:
 3. Progressive Overload:
    - Compounds (Squats, Deadlifts, Bench, OHP): Linear loading (+2.5 kg / +5 lbs) when sets/reps targets at target RPE are met.
    - Accessories: Double progression (hold weight steady until reaching upper bound reps across all sets, e.g. 3x12, then increase).
+   - Working Weights: You MUST ALWAYS specify a numeric target working weight (targetWeight) for all weightlifting and resistance exercises. If the athlete has no logged lift history for an exercise yet, estimate a safe, conservative baseline starting weight based on their body weight and modality (e.g. 15-20% of body weight for dumbbell accessories) rather than leaving it null or empty.
 4. Auto-Regulation & Safety Invariants:
    - Illness, fever, or acute joint pain reports REQUIRE canceling high-intensity sessions and programming REST/mobility recovery. When an athlete reports acute illness, fever, or severe systemic fatigue on a given day, you MUST convert BOTH the current day and at least the following day (a minimum 48-hour rest buffer) to 'REST' or 'MOBILITY_RECOVERY' before re-introducing training.
    - NEVER program heavy lower-body compound lifts (Squat, Deadlift) within 12 hours before or immediately after high-intensity BJJ/Kickboxing sparring.
