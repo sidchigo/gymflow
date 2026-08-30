@@ -244,10 +244,11 @@ Your tone is grounded, direct, athletic, and actionable. You never use fluffy gr
 
 GROUND TRUTH RULES:
 1. You MUST ONLY schedule class activities (like BJJ, Kickboxing, DUT, TRX, etc.) that match valid slots in the Gym Timetable provided below.
-2. For non-class slots (e.g. UPPER_HYPERTROPHY, LOWER_STRENGTH, REST, MOBILITY_RECOVERY), you can schedule them as needed during standard open hours.
-3. You MUST NOT modify the weekly plan or log workout performance in plain text. Any plan creation, modification, lift logging, or event logging MUST be done by calling the appropriate tool.
-4. Saturday can only be scheduled for morning sessions, and ONLY if a weekday workout was missed or requested. Sunday is strictly REST (no workouts).
-5. When a scheduled combat session (BJJ/KB) is cancelled, replace it with an alternative conditioning (KB/Boxing/DUT/TRX) or strength session that maintains the 5-day training goal.
+2. Timetable Sync & Fallback: When the next week's gym schedule timetable slots list is empty or shows "(No scheduled classes found)", you MUST explicitly write in your response text the exact word "unpublished" to warn the user that next week's official gym schedule has not been published yet. Explain to the user that next week's schedule is unpublished, generate a provisional open-floor strength and conditioning split so they have a baseline plan (by calling the tool), and advise them to run 'Sync Gym Schedule' once it is published.
+3. For non-class slots (e.g. UPPER_HYPERTROPHY, LOWER_STRENGTH, REST, MOBILITY_RECOVERY), you can schedule them as needed during standard open hours.
+4. You MUST NOT modify the weekly plan or log workout performance in plain text. Any plan creation, modification, lift logging, or event logging MUST be done by calling the appropriate tool.
+5. Saturday can only be scheduled for morning sessions, and ONLY if a weekday workout was missed or requested. Sunday is strictly REST (no workouts).
+6. When a scheduled combat session (BJJ/KB) is cancelled, replace it with an alternative conditioning (KB/Boxing/DUT/TRX) or strength session that maintains the 5-day training goal.
 
 ATHLETIC REASONING & PERIODIZATION RULES:
 1. Combat Priority: Lock in the 2 combat sports sessions (Kickboxing & BJJ) first, strictly mapping them to verified gym slots.
@@ -270,24 +271,24 @@ CURRENT CONTEXT (Current Date/Time IST: ${params.currentDateIST})
 
 ---
 ATHLETE PROFILE:
-- Weight: ${profile.weightKg} kg (Preferred unit: ${profile.weightUnitPreference})
-- Height: ${profile.heightCm} cm
-- Modalities: ${profile.modalities.join(", ")}
-- Target Days/Week: ${profile.targetDaysPerWeek}
-- Mandatory Combat: Kickboxing (${profile.mandatoryCombatSessions.kickboxing}/wk), BJJ (${profile.mandatoryCombatSessions.bjj}/wk)
-- Dietary Preference: ${profile.dietaryPreference}
-- Daily Protein Target: ${profile.targetDailyProteinGrams}g
+- Weight: ${profile.weightKg ?? 70} kg (Preferred unit: ${(profile as any).weightUnitPreference ?? (profile as any).unitPreference ?? "KG"})
+- Height: ${profile.heightCm ?? 170} cm
+- Modalities: ${(profile.modalities ?? []).join(", ")}
+- Target Days/Week: ${profile.targetDaysPerWeek ?? 5}
+- Mandatory Combat: Kickboxing (${profile.mandatoryCombatSessions?.kickboxing ?? (profile as any).weeklyCommitments?.kickboxingClasses ?? 0}/wk), BJJ (${profile.mandatoryCombatSessions?.bjj ?? (profile as any).weeklyCommitments?.bjjClasses ?? 0}/wk)
+- Dietary Preference: ${profile.dietaryPreference ?? "BALANCED"}
+- Daily Protein Target: ${profile.targetDailyProteinGrams ?? 125}g
 - Weekly Work Schedule:
-${Object.entries(profile.weeklyWorkSchedule)
-  .map(([day, s]) => `  * ${day}: ${s.mode} (Commute: ${s.commuteMinutesOneWay} mins one way)`)
+${Object.entries((profile as any).weeklyWorkSchedule ?? (profile as any).workSchedule ?? {})
+  .map(([day, s]) => `  * ${day}: ${(s as any).mode} (Commute: ${(s as any).commuteMinutesOneWay} mins one way)`)
   .join("\n")}
 
 ---
 LIFT HISTORY BASES:
 ${
-  params.athleteState.lifts.length === 0
+  (params.athleteState.lifts || []).length === 0
     ? "  (No lift records logged yet)"
-    : params.athleteState.lifts
+    : (params.athleteState.lifts || [])
         .slice(-10)
         .map((l) => {
           const setsStr = l.sets
@@ -301,9 +302,9 @@ ${
 ---
 ATHLETE EVENTS (Recent health/schedule incidents):
 ${
-  params.athleteState.events.length === 0
+  (params.athleteState.events || []).length === 0
     ? "  (No health/schedule disruptions logged)"
-    : params.athleteState.events
+    : (params.athleteState.events || [])
         .slice(-5)
         .map((e) => `  * ${e.date} [${e.type}] Severity: ${e.severity}. Details: ${e.notes}`)
         .join("\n")
@@ -350,6 +351,8 @@ export async function runCoachAgent(params: {
   const now = new Date();
   const isoWeekId = weekKey(now);
   const currentDateIST = nowISTDateTime();
+
+
 
   // 2. Fetch state in parallel from Redis
   const scheduleStoreKey = scheduleWeekKey(isoWeekId);

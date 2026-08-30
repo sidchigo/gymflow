@@ -310,7 +310,7 @@ export function mergeWeeklyStore(
  *         when the gym API is unreachable AND a stale cache exists. The caller
  *         should surface the stale data with a warning header.
  */
-export async function fetchAndSync(userId: string): Promise<WeeklyScheduleStore> {
+export async function fetchAndSync(userId: string, targetWeekId?: string): Promise<WeeklyScheduleStore> {
   const tag = `[schedule-service] userId=${userId}`;
 
   // ── 1. Resolve gym token ─────────────────────────────────────────────────
@@ -322,7 +322,8 @@ export async function fetchAndSync(userId: string): Promise<WeeklyScheduleStore>
 
   // ── 2. Determine week key & load existing cache ──────────────────────────
   const now = new Date();
-  const key = scheduleWeekKey(weekKey(now));
+  const activeWeekId = targetWeekId || weekKey(now);
+  const key = scheduleWeekKey(activeWeekId);
   // Capture the IST datetime *once* so that computeDiffs and mergeWeeklyStore
   // use a consistent cutoff even if the sync takes a few seconds.
   const nowDT = nowISTDateTime(); // "YYYY-MM-DDTHH:MM" IST
@@ -425,13 +426,15 @@ export type SyncResult =
  */
 export async function getOrSyncWeeklySchedule(
   userId: string,
-  options?: { forceRefresh?: boolean },
+  options?: { forceRefresh?: boolean | undefined; targetWeekId?: string | undefined } | undefined,
 ): Promise<SyncResult> {
   const forceRefresh = options?.forceRefresh ?? false;
+  const targetWeekId = options?.targetWeekId;
   const tag = `[schedule-service:cache] userId=${userId}`;
 
   // ── Check existing cache ─────────────────────────────────────────────────
-  const key = scheduleWeekKey(weekKey(new Date()));
+  const activeWeekId = targetWeekId || weekKey(new Date());
+  const key = scheduleWeekKey(activeWeekId);
   const cached = await getWeeklyStore(key);
 
   if (cached !== null && !forceRefresh) {
@@ -457,7 +460,7 @@ export async function getOrSyncWeeklySchedule(
 
   // ── Sync from gym API ─────────────────────────────────────────────────────
   try {
-    const store = await fetchAndSync(userId);
+    const store = await fetchAndSync(userId, activeWeekId);
     return { fromCache: false, isStaleFallback: false, store };
   } catch (err) {
     // Absorb GYM_UNAVAILABLE when a stale store is available so the route can
