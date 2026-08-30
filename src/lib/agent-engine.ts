@@ -15,6 +15,7 @@ import {
   getWeeklyWorkoutPlan,
   saveWeeklyWorkoutPlan,
   getWeeklyStore,
+  saveWeeklyStore,
   scheduleWeekKey,
 } from "@/lib/redis";
 import { weekKey, nowIST, nowISTDateTime } from "@/lib/schedule-service";
@@ -462,6 +463,15 @@ export async function runCoachAgent(params: {
               updatedAt: nowIST(),
             };
             await saveWeeklyWorkoutPlan(userId, isoWeekId, fullPlan);
+
+            // Clear schedule diffs once a plan has been updated/synced to resolve notification banner
+            const storeKey = scheduleWeekKey(isoWeekId);
+            const store = await getWeeklyStore(storeKey);
+            if (store) {
+              store.diffs = [];
+              await saveWeeklyStore(storeKey, store);
+            }
+
             executionResult = JSON.stringify({
               success: true,
               message: "Weekly plan successfully generated/updated and saved to Redis.",
@@ -685,6 +695,15 @@ export async function runCoachAgentStream(params: {
               updatedAt: nowIST(),
             };
             await saveWeeklyWorkoutPlan(userId, isoWeekId, fullPlan);
+
+            // Clear schedule diffs once a plan has been updated/synced to resolve notification banner
+            const storeKey = scheduleWeekKey(isoWeekId);
+            const store = await getWeeklyStore(storeKey);
+            if (store) {
+              store.diffs = [];
+              await saveWeeklyStore(storeKey, store);
+            }
+
             executionResult = JSON.stringify({
               success: true,
               message: "Weekly plan successfully generated/updated and saved to Redis.",
