@@ -359,8 +359,8 @@ export async function runCoachAgent(params: {
 
   // 2. Fetch state in parallel from Redis
   const scheduleStoreKey = scheduleWeekKey(isoWeekId);
-  const [athleteState, weeklyGymStore, currentPlanDoc] = await Promise.all([
-    getAthleteState(userId),
+  const athleteState = await getAthleteState(userId);
+  let [weeklyGymStore, currentPlanDoc] = await Promise.all([
     getWeeklyStore(scheduleStoreKey),
     getWeeklyWorkoutPlan(userId, isoWeekId),
   ]);
@@ -369,48 +369,9 @@ export async function runCoachAgent(params: {
     throw new Error(`Athlete profile/state not found for user: ${userId}`);
   }
 
-  // 3. Formulate prompt context elements
-  const slotsText =
-    weeklyGymStore?.slots && weeklyGymStore.slots.length > 0
-      ? weeklyGymStore.slots
-          .map((s) => `  * Slot [${s.id}] - ${s.date} (${s.startTime}-${s.endTime}): ${s.title} by ${s.trainer}`)
-          .join("\n")
-      : "  (No scheduled classes found)";
-
-  const diffsText =
-    weeklyGymStore?.diffs && weeklyGymStore.diffs.length > 0
-      ? weeklyGymStore.diffs
-          .map((d) => `  * [${d.type}] Slot [${d.slotId}] - ${d.title} on ${d.date} original time: ${d.originalTime}`)
-          .join("\n")
-      : "  (No class changes/cancellations detected)";
-
-  const currentPlanText = currentPlanDoc
-    ? currentPlanDoc.plan
-        .map((p) => {
-          const exercisesStr = p.exercises
-            .map(
-              (e) =>
-                `    - ${e.name} ${e.sets}x${e.reps} @ ${e.targetWeight || "?"} ${e.unit} (RPE ${e.targetRpe || "N/A"})${
-                  e.supersetGroupId ? ` [Super: ${e.supersetGroupId}${e.orderInGroup || ""}]` : ""
-                }`
-            )
-            .join("\n");
-          return `  * ${p.date} (${p.day}) - ${p.focus} [${p.modality}] (Time: ${p.plannedTime})\n${exercisesStr}\n    Fuel: ${p.nutritionAdvice}`;
-        })
-        .join("\n")
-    : "  (No active weekly plan found)";
-
-  const systemPrompt = buildSystemPrompt({
-    athleteState,
-    gymScheduleSlots: slotsText,
-    gymScheduleDiffs: diffsText,
-    currentPlan: currentPlanText,
-    currentDateIST,
-  });
-
   // 4. Set up message queue
   const messages: LLMMessage[] = [
-    { role: "system", parts: [{ text: systemPrompt }] },
+    { role: "system", parts: [{ text: "" }] }, // Placeholder, rebuilt in loop
     ...chatHistory,
     { role: "user", parts: [{ text: userMessage }] },
   ];
@@ -421,6 +382,48 @@ export async function runCoachAgent(params: {
 
   while (loopCount < maxLoops) {
     loopCount++;
+
+    // 3. Formulate prompt context elements dynamically
+    const slotsText =
+      weeklyGymStore?.slots && weeklyGymStore.slots.length > 0
+        ? weeklyGymStore.slots
+            .map((s) => `  * Slot [${s.id}] - ${s.date} (${s.startTime}-${s.endTime}): ${s.title} by ${s.trainer}`)
+            .join("\n")
+        : "  (No scheduled classes found)";
+
+    const diffsText =
+      weeklyGymStore?.diffs && weeklyGymStore.diffs.length > 0
+        ? weeklyGymStore.diffs
+            .map((d) => `  * [${d.type}] Slot [${d.slotId}] - ${d.title} on ${d.date} original time: ${d.originalTime}`)
+            .join("\n")
+        : "  (No class changes/cancellations detected)";
+
+    const currentPlanText = currentPlanDoc
+      ? currentPlanDoc.plan
+          .map((p) => {
+            const exercisesStr = p.exercises
+              .map(
+                (e) =>
+                  `    - ${e.name} ${e.sets}x${e.reps} @ ${e.targetWeight || "?"} ${e.unit} (RPE ${e.targetRpe || "N/A"})${
+                    e.supersetGroupId ? ` [Super: ${e.supersetGroupId}${e.orderInGroup || ""}]` : ""
+                  }`
+              )
+              .join("\n");
+            return `  * ${p.date} (${p.day}) - ${p.focus} [${p.modality}] (Time: ${p.plannedTime})\n${exercisesStr}\n    Fuel: ${p.nutritionAdvice}`;
+          })
+          .join("\n")
+      : "  (No active weekly plan found)";
+
+    const systemPrompt = buildSystemPrompt({
+      athleteState,
+      gymScheduleSlots: slotsText,
+      gymScheduleDiffs: diffsText,
+      currentPlan: currentPlanText,
+      currentDateIST,
+    });
+
+    // Update system prompt message at the root of the thread
+    messages[0] = { role: "system", parts: [{ text: systemPrompt }] };
 
     const completionParams: {
       messages: LLMMessage[];
@@ -464,6 +467,7 @@ export async function runCoachAgent(params: {
               updatedAt: nowIST(),
             };
             await saveWeeklyWorkoutPlan(userId, isoWeekId, fullPlan);
+            currentPlanDoc = fullPlan; // Reassign locally to update system prompt in next iteration
 
             // Clear schedule diffs once a plan has been updated/synced to resolve notification banner
             const storeKey = scheduleWeekKey(isoWeekId);
@@ -471,6 +475,7 @@ export async function runCoachAgent(params: {
             if (store) {
               store.diffs = [];
               await saveWeeklyStore(storeKey, store);
+              weeklyGymStore = store; // Reassign locally to update system prompt in next iteration
             }
 
             executionResult = JSON.stringify({
@@ -575,8 +580,8 @@ export async function runCoachAgentStream(params: {
 
   // 2. Fetch state in parallel from Redis
   const scheduleStoreKey = scheduleWeekKey(isoWeekId);
-  const [athleteState, weeklyGymStore, currentPlanDoc] = await Promise.all([
-    getAthleteState(userId),
+  const athleteState = await getAthleteState(userId);
+  let [weeklyGymStore, currentPlanDoc] = await Promise.all([
     getWeeklyStore(scheduleStoreKey),
     getWeeklyWorkoutPlan(userId, isoWeekId),
   ]);
@@ -585,48 +590,9 @@ export async function runCoachAgentStream(params: {
     throw new Error(`Athlete profile/state not found for user: ${userId}`);
   }
 
-  // 3. Formulate prompt context elements
-  const slotsText =
-    weeklyGymStore?.slots && weeklyGymStore.slots.length > 0
-      ? weeklyGymStore.slots
-          .map((s) => `  * Slot [${s.id}] - ${s.date} (${s.startTime}-${s.endTime}): ${s.title} by ${s.trainer}`)
-          .join("\n")
-      : "  (No scheduled classes found)";
-
-  const diffsText =
-    weeklyGymStore?.diffs && weeklyGymStore.diffs.length > 0
-      ? weeklyGymStore.diffs
-          .map((d) => `  * [${d.type}] Slot [${d.slotId}] - ${d.title} on ${d.date} original time: ${d.originalTime}`)
-          .join("\n")
-      : "  (No class changes/cancellations detected)";
-
-  const currentPlanText = currentPlanDoc
-    ? currentPlanDoc.plan
-        .map((p) => {
-          const exercisesStr = p.exercises
-            .map(
-              (e) =>
-                `    - ${e.name} ${e.sets}x${e.reps} @ ${e.targetWeight || "?"} ${e.unit} (RPE ${e.targetRpe || "N/A"})${
-                  e.supersetGroupId ? ` [Super: ${e.supersetGroupId}${e.orderInGroup || ""}]` : ""
-                }`
-            )
-            .join("\n");
-          return `  * ${p.date} (${p.day}) - ${p.focus} [${p.modality}] (Time: ${p.plannedTime})\n${exercisesStr}\n    Fuel: ${p.nutritionAdvice}`;
-        })
-        .join("\n")
-    : "  (No active weekly plan found)";
-
-  const systemPrompt = buildSystemPrompt({
-    athleteState,
-    gymScheduleSlots: slotsText,
-    gymScheduleDiffs: diffsText,
-    currentPlan: currentPlanText,
-    currentDateIST,
-  });
-
   // 4. Set up message queue
   const messages: LLMMessage[] = [
-    { role: "system", parts: [{ text: systemPrompt }] },
+    { role: "system", parts: [{ text: "" }] }, // Placeholder, rebuilt in loop
     ...chatHistory,
     { role: "user", parts: [{ text: userMessage }] },
   ];
@@ -638,6 +604,48 @@ export async function runCoachAgentStream(params: {
 
   while (loopCount < maxLoops) {
     loopCount++;
+
+    // 3. Formulate prompt context elements dynamically
+    const slotsText =
+      weeklyGymStore?.slots && weeklyGymStore.slots.length > 0
+        ? weeklyGymStore.slots
+            .map((s) => `  * Slot [${s.id}] - ${s.date} (${s.startTime}-${s.endTime}): ${s.title} by ${s.trainer}`)
+            .join("\n")
+        : "  (No scheduled classes found)";
+
+    const diffsText =
+      weeklyGymStore?.diffs && weeklyGymStore.diffs.length > 0
+        ? weeklyGymStore.diffs
+            .map((d) => `  * [${d.type}] Slot [${d.slotId}] - ${d.title} on ${d.date} original time: ${d.originalTime}`)
+            .join("\n")
+        : "  (No class changes/cancellations detected)";
+
+    const currentPlanText = currentPlanDoc
+      ? currentPlanDoc.plan
+          .map((p) => {
+            const exercisesStr = p.exercises
+              .map(
+                (e) =>
+                  `    - ${e.name} ${e.sets}x${e.reps} @ ${e.targetWeight || "?"} ${e.unit} (RPE ${e.targetRpe || "N/A"})${
+                    e.supersetGroupId ? ` [Super: ${e.supersetGroupId}${e.orderInGroup || ""}]` : ""
+                  }`
+              )
+              .join("\n");
+            return `  * ${p.date} (${p.day}) - ${p.focus} [${p.modality}] (Time: ${p.plannedTime})\n${exercisesStr}\n    Fuel: ${p.nutritionAdvice}`;
+          })
+          .join("\n")
+      : "  (No active weekly plan found)";
+
+    const systemPrompt = buildSystemPrompt({
+      athleteState,
+      gymScheduleSlots: slotsText,
+      gymScheduleDiffs: diffsText,
+      currentPlan: currentPlanText,
+      currentDateIST,
+    });
+
+    // Update system prompt message at the root of the thread
+    messages[0] = { role: "system", parts: [{ text: systemPrompt }] };
 
     const completionParams: {
       messages: LLMMessage[];
@@ -696,6 +704,7 @@ export async function runCoachAgentStream(params: {
               updatedAt: nowIST(),
             };
             await saveWeeklyWorkoutPlan(userId, isoWeekId, fullPlan);
+            currentPlanDoc = fullPlan; // Reassign locally to update system prompt in next iteration
 
             // Clear schedule diffs once a plan has been updated/synced to resolve notification banner
             const storeKey = scheduleWeekKey(isoWeekId);
@@ -703,6 +712,7 @@ export async function runCoachAgentStream(params: {
             if (store) {
               store.diffs = [];
               await saveWeeklyStore(storeKey, store);
+              weeklyGymStore = store; // Reassign locally to update system prompt in next iteration
             }
 
             executionResult = JSON.stringify({
