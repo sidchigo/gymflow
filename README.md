@@ -11,7 +11,7 @@ GymFlow is an open-source AI coaching copilot designed for combat sports athlete
 - **Dynamic Mid-Week Schedule Diffing:** Ingests live timetable endpoints, compares against weekly Redis state snapshots, and alerts the context engine to slot cancellations.
 - **Stateful Agentic Replanning:** Implements deterministic tool calling (`replan_week_schedule`, `log_constraint`) via Gemini Pro/Flash rather than brittle text generation.
 - **Spec-Driven & Zero-Cost Serverless:** Engineered entirely on Next.js 15 App Router, TypeScript strict mode, Zod boundary enforcement, and serverless edge compute ($0/mo operating footprint).
-- **Offline Mock Adapter:** Full local testability and public demo support using sanitized JSON fixtures (`USE_MOCK_GYM=true`).
+- **Offline Mock Adapter:** Full local testability and public demo support using sanitized JSON fixtures (`GYM_USE_MOCK=true`).
 
 ---
 
@@ -78,7 +78,7 @@ GymFlow is an open-source AI coaching copilot designed for combat sports athlete
 ```bash
 git clone https://github.com/your-username/gymflow.git
 cd gymflow
-pnpm install
+npm install
 ```
 
 ### 2. Configure Environment Variables
@@ -90,23 +90,26 @@ cp .env.example .env.local
 Fill in the required credentials:
 ```env
 # Gym Provider Configuration (Use mock mode for offline dev)
-USE_MOCK_GYM=true
+GYM_USE_MOCK=true
 GYM_API_BASE_URL="https://api.your-gym-provider.com"
 
 # Upstash Redis
 UPSTASH_REDIS_REST_URL="https://your-redis-instance.upstash.io"
 UPSTASH_REDIS_REST_TOKEN="your_redis_token"
 
-# LLM Provider
-GEMINI_API_KEY="your_google_ai_studio_key"
+# LLM Provider Configuration
+LLM_PROVIDER="openai" # or "gemini"
+LLM_MODEL="google/gemini-2.5-flash"
+LLM_API_KEY="your_llm_api_key"
+LLM_BASE_URL="https://openrouter.ai/api/v1" # if using OpenAI-compatible providers like OpenRouter
 
 # App Security
-SESSION_SECRET="generate_a_random_32_byte_secret"
+SESSION_JWT_SECRET="generate_a_random_32_byte_secret"
 ```
 
 ### 3. Run Locally
 ```bash
-pnpm dev
+npm run dev
 ```
 Open `http://localhost:3000` to interact with the coaching copilot.
 
@@ -115,7 +118,7 @@ Open `http://localhost:3000` to interact with the coaching copilot.
 ## 🧪 Running Agent Evals
 To evaluate the LLM's dynamic replanning logic against deterministic test cases:
 ```bash
-pnpm test:evals
+npm run eval
 ```
 
 ---

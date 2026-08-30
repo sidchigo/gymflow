@@ -74,12 +74,9 @@ export class GeminiLLMProvider implements LLMProvider {
   private defaultModel: string;
 
   constructor(options?: { apiKey?: string; defaultModel?: string }) {
-    // GoogleGenAI reads process.env.GEMINI_API_KEY if no apiKey is provided.
     const genaiOptions: { apiKey?: string } = {};
     const apiKey =
       options?.apiKey ||
-      process.env.GEMINI_API_KEY ||
-      process.env.GOOGLE_GENAI_API_KEY ||
       process.env.LLM_API_KEY;
     if (apiKey) {
       genaiOptions.apiKey = apiKey;
@@ -87,7 +84,7 @@ export class GeminiLLMProvider implements LLMProvider {
     this.ai = new GoogleGenAI(genaiOptions);
     this.defaultModel =
       options?.defaultModel ||
-      process.env.GEMINI_MODEL ||
+      process.env.LLM_MODEL ||
       "gemini-2.5-flash";
   }
 
