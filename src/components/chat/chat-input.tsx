@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { SendHorizontal } from "lucide-react";
 
 interface ChatInputProps {
@@ -18,6 +18,7 @@ const QUICK_CHIPS: readonly { label: string }[] = [
 
 export default function ChatInput({ onSendMessage, disabled = false }: ChatInputProps) {
   const [input, setInput] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,6 +26,9 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
     if (!trimmed || disabled) return;
     onSendMessage(trimmed);
     setInput("");
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -34,7 +38,9 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
       if (!trimmed || disabled) return;
       onSendMessage(trimmed);
       setInput("");
-      e.currentTarget.style.height = "auto";
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+      }
     }
   };
 
@@ -74,6 +80,7 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
         <div className="relative flex-1 flex items-center bg-white/5 backdrop-blur-md border border-zinc-800/40 rounded-[24px] overflow-hidden">
           <textarea
             id="coach-chat-input"
+            ref={textareaRef}
             disabled={disabled}
             value={input}
             onChange={handleChange}
