@@ -556,40 +556,37 @@ export default function ProfileSettingsScreen({
 
         {/* ── PWA Installation Support ─────────────────────────── */}
         {!isInstalled && (installPromptEvent || isIOS) && (
-          <div className="border-t border-zinc-900/60 pt-5 space-y-3">
-            <div className="flex items-center gap-1.5 pb-1">
-              <Smartphone size={12} className="text-zinc-500" />
-              <h3 className="font-mono text-[9px] tracking-widest text-zinc-500 uppercase font-bold">
-                App Installation
-              </h3>
-            </div>
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-xl border border-zinc-900/80 bg-zinc-950/20 p-4">
-              <div className="space-y-1">
-                <h4 className="text-sm font-bold text-zinc-200">GymFlow Mobile & Desktop App</h4>
-                <p className="text-xs text-zinc-400 max-w-md leading-relaxed">
-                  Install GymFlow to your home screen or desktop for a standalone full-screen experience and quick offline access.
-                </p>
+          <div className="rounded-xl border border-zinc-900 bg-zinc-950/20 p-3.5 flex items-center justify-between gap-4 text-left">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <Smartphone size={12} className="text-violet-400 shrink-0" />
+                <span className="text-xs font-bold text-zinc-200">GymFlow App</span>
               </div>
-              {installPromptEvent ? (
-                <button
-                  type="button"
-                  onClick={handleInstallClick}
-                  className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 h-9 text-xs font-bold text-white transition-all hover:bg-violet-500 active:scale-[0.98] outline-none shadow-md shadow-violet-900/20 cursor-pointer animate-pulse hover:animate-none"
-                >
-                  <Download size={14} />
-                  Install App
-                </button>
-              ) : isIOS ? (
-                <div className="text-xs text-zinc-500 border border-zinc-900/60 bg-zinc-950/40 rounded-lg p-2.5 max-w-xs leading-normal">
-                  <span className="font-bold text-zinc-400">iOS Install:</span> Tap Safari's share icon <span className="inline-block text-zinc-300 font-bold border border-zinc-800 rounded px-1.5 py-0.5 text-[10px] mx-1">Share</span> and select <span className="text-zinc-300 font-bold">Add to Home Screen</span>.
-                </div>
-              ) : null}
+              <p className="text-[10px] text-zinc-400 mt-0.5 leading-normal">
+                {isIOS 
+                  ? "Tap Safari Share → Add to Home Screen" 
+                  : "Install for standalone experience & offline access."}
+              </p>
             </div>
+            {installPromptEvent ? (
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="shrink-0 flex items-center justify-center gap-1 px-3 h-7.5 rounded-md bg-violet-600 text-[10px] font-extrabold text-white transition-all hover:bg-violet-500 active:scale-[0.98] outline-none cursor-pointer"
+              >
+                <Download size={11} />
+                Install
+              </button>
+            ) : isIOS ? (
+              <span className="shrink-0 text-[9px] text-zinc-400 font-mono border border-zinc-800 rounded px-1.5 py-0.5 bg-zinc-950/60 font-bold uppercase tracking-wider">
+                Safari
+              </span>
+            ) : null}
           </div>
         )}
 
         {/* ── Actions ─────────────────────────────────────────────── */}
-        <div className="border-t border-zinc-900/60 pt-5 pb-1 flex flex-col sm:flex-row gap-3">
+        <div className="border-t border-zinc-900/60 pt-5 pb-16 flex flex-col sm:flex-row gap-3">
           <button
             type="submit"
             id="settings-save-btn"
