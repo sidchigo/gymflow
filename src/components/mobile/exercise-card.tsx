@@ -20,12 +20,12 @@ export default function ExerciseCard({ exercise, preferredUnit }: ExerciseCardPr
 
   if (displayWeight != null && preferredUnit && preferredUnit !== displayUnit) {
     if (preferredUnit === "LBS" && displayUnit === "KG") {
-      // Round to nearest 2.5 lbs (standard barbell/dumbbell loading increment)
-      displayWeight = Math.round((displayWeight * 2.20462) / 2.5) * 2.5;
+      // Round to nearest 5 lbs (standard gym dumbbell & barbell increments)
+      displayWeight = Math.round((displayWeight * 2.20462) / 5) * 5;
       displayUnit = "LBS";
     } else if (preferredUnit === "KG" && displayUnit === "LBS") {
-      // Round to nearest 0.5 kg
-      displayWeight = Math.round((displayWeight * 0.453592) / 0.5) * 0.5;
+      // Round to nearest 1 kg (clean metric increments)
+      displayWeight = Math.round(displayWeight * 0.453592);
       displayUnit = "KG";
     }
   }
