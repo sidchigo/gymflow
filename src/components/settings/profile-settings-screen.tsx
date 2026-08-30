@@ -586,12 +586,12 @@ export default function ProfileSettingsScreen({
         )}
 
         {/* ── Actions ─────────────────────────────────────────────── */}
-        <div className="border-t border-zinc-900/60 pt-5 pb-16 flex flex-col sm:flex-row gap-3">
+        <div className="border-t border-zinc-900/60 pt-5 pb-16 flex flex-col sm:flex-row gap-3 shrink-0">
           <button
             type="submit"
             id="settings-save-btn"
             disabled={saving}
-            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-100 h-10 text-xs font-bold text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98] disabled:opacity-50 outline-none shadow-sm cursor-pointer"
+            className="flex-1 shrink-0 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-100 h-10 text-xs font-bold text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98] disabled:opacity-50 outline-none shadow-sm cursor-pointer"
           >
             <Save size={12} strokeWidth={2.5} />
             {saving ? "Saving..." : "Save Configuration"}
@@ -600,7 +600,7 @@ export default function ProfileSettingsScreen({
             type="button"
             id="settings-logout-btn"
             onClick={handleLogout}
-            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-red-950/30 bg-red-950/10 h-10 text-xs font-bold text-red-400/90 transition-all hover:bg-red-950/20 active:scale-[0.98] outline-none cursor-pointer"
+            className="flex-1 shrink-0 flex items-center justify-center gap-1.5 rounded-lg border border-red-950/30 bg-red-950/10 h-10 text-xs font-bold text-red-400/90 transition-all hover:bg-red-950/20 active:scale-[0.98] outline-none cursor-pointer"
           >
             <LogOut size={12} strokeWidth={2.5} />
             Log Out
