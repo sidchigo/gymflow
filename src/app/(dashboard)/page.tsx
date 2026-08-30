@@ -26,49 +26,10 @@ export default async function DashboardPage() {
 
   const { userId } = session;
 
-  // 2. Fetch and seed athlete profile if missing
-  let isConfigured = true;
-  let athleteState = await getAthleteState(userId);
+  // 2. Fetch and verify athlete profile
+  const athleteState = await getAthleteState(userId);
   if (!athleteState) {
-    isConfigured = false;
-    athleteState = {
-      profile: {
-        userId,
-        weightKg: 74,
-        heightCm: 178,
-        targetDaysPerWeek: 5,
-        weightUnitPreference: "KG",
-        mandatoryCombatSessions: {
-          kickboxing: 1,
-          bjj: 1,
-        },
-        weeklyWorkSchedule: {
-          Monday: { mode: "WFH", commuteMinutesOneWay: 0 },
-          Tuesday: { mode: "WFO", commuteMinutesOneWay: 45 },
-          Wednesday: { mode: "WFH", commuteMinutesOneWay: 0 },
-          Thursday: { mode: "WFO", commuteMinutesOneWay: 45 },
-          Friday: { mode: "WFH", commuteMinutesOneWay: 0 },
-          Saturday: { mode: "WFH", commuteMinutesOneWay: 0 },
-          Sunday: { mode: "WFH", commuteMinutesOneWay: 0 },
-        },
-        modalities: [
-          "KICKBOXING",
-          "BJJ",
-          "UPPER_HYPERTROPHY",
-          "LOWER_STRENGTH",
-          "BOXING_CONDITIONING",
-          "KB_CONDITIONING",
-          "DUT",
-          "TRX",
-          "AB_ASSAULT",
-          "MOBILITY_RECOVERY",
-        ],
-        dietaryPreference: "HIGH_PROTEIN_NON_VEG",
-        targetDailyProteinGrams: 150,
-      },
-      lifts: [],
-      events: [],
-    };
+    redirect("/settings?forceSetup=true");
   }
 
   // 3. Fetch weekly timetable schedule
@@ -94,8 +55,8 @@ export default async function DashboardPage() {
     <DashboardClient
       initialSchedule={scheduleStore}
       initialPlan={weeklyPlan}
-      initialAthleteState={athleteState}
-      initialConfigured={isConfigured}
+      initialConfigured={true}
     />
   );
 }
+
