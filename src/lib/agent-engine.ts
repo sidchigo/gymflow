@@ -378,7 +378,7 @@ export async function runCoachAgent(params: {
 
   const toolCallsExecuted: AgentResult["toolCallsExecuted"] = [];
   let loopCount = 0;
-  const maxLoops = 5;
+  const maxLoops = 20;
 
   while (loopCount < maxLoops) {
     loopCount++;
@@ -599,7 +599,7 @@ export async function runCoachAgentStream(params: {
 
   const toolCallsExecuted: AgentResult["toolCallsExecuted"] = [];
   let loopCount = 0;
-  const maxLoops = 5;
+  const maxLoops = 20;
   let finalResponseText = "";
 
   while (loopCount < maxLoops) {
