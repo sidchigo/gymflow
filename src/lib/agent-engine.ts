@@ -103,10 +103,20 @@ export const replanWeekScheduleTool: LLMToolDefinition = {
                   },
                   targetWeight: {
                     type: "NUMBER",
-                    description: "Prescribed weight value based on history",
+                    description: "Legacy target weight (optional)",
                     nullable: true,
                   },
-                  unit: { type: "STRING", enum: ["KG", "LBS"] },
+                  unit: { type: "STRING", enum: ["KG", "LBS"], nullable: true },
+                  weightKg: {
+                    type: "NUMBER",
+                    description: "Prescribed weight in kilograms (e.g. 20, 22.5, 45, or null if bodyweight)",
+                    nullable: true,
+                  },
+                  weightLbs: {
+                    type: "NUMBER",
+                    description: "Prescribed weight in pounds. MUST be rounded to standard 5 lbs increments (e.g. 45, 50, 90, or null if bodyweight). Do not output decimals for LBS (e.g. use 45 instead of 44.1).",
+                    nullable: true,
+                  },
                   targetRpe: {
                     type: "NUMBER",
                     description: "Target RPE (1-10 scale)",
@@ -131,11 +141,11 @@ export const replanWeekScheduleTool: LLMToolDefinition = {
                   progressionNote: {
                     type: "STRING",
                     description:
-                      'Progression directive (e.g. "+5 lbs over last week")',
+                      'Progression directive (e.g. "+5 lbs over last week"). ALWAYS specify progress targets in both KG and LBS (e.g. "+1 kg / +2.5 lbs")',
                     nullable: true,
                   },
                 },
-                required: ["name", "sets", "reps", "unit", "restSeconds"],
+                required: ["name", "sets", "reps", "restSeconds"],
               },
             },
             nutritionAdvice: {

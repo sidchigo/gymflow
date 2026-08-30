@@ -14,19 +14,32 @@ export default function ExerciseCard({ exercise, preferredUnit }: ExerciseCardPr
     ? `${exercise.supersetGroupId}${exercise.orderInGroup ?? ""}`
     : null;
 
-  // Runtime weight and unit conversion
-  let displayWeight = exercise.targetWeight;
-  let displayUnit = exercise.unit || "KG";
+  // Runtime weight selection and legacy fallback
+  let displayWeight: number | null | undefined = null;
+  let displayUnit = preferredUnit || "KG";
 
-  if (displayWeight != null && preferredUnit && preferredUnit !== displayUnit) {
-    if (preferredUnit === "LBS" && displayUnit === "KG") {
-      // Round to nearest 5 lbs (standard gym dumbbell & barbell increments)
-      displayWeight = Math.round((displayWeight * 2.20462) / 5) * 5;
-      displayUnit = "LBS";
-    } else if (preferredUnit === "KG" && displayUnit === "LBS") {
-      // Round to nearest 1 kg (clean metric increments)
-      displayWeight = Math.round(displayWeight * 0.453592);
-      displayUnit = "KG";
+  if (preferredUnit === "LBS") {
+    if (exercise.weightLbs != null) {
+      displayWeight = exercise.weightLbs;
+    } else if (exercise.targetWeight != null) {
+      const origUnit = exercise.unit || "KG";
+      if (origUnit === "KG") {
+        displayWeight = Math.round((exercise.targetWeight * 2.20462) / 5) * 5;
+      } else {
+        displayWeight = exercise.targetWeight;
+      }
+    }
+  } else {
+    // Default to KG
+    if (exercise.weightKg != null) {
+      displayWeight = exercise.weightKg;
+    } else if (exercise.targetWeight != null) {
+      const origUnit = exercise.unit || "KG";
+      if (origUnit === "LBS") {
+        displayWeight = Math.round(exercise.targetWeight * 0.453592);
+      } else {
+        displayWeight = exercise.targetWeight;
+      }
     }
   }
 
