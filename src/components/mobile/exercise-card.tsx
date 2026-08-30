@@ -20,10 +20,12 @@ export default function ExerciseCard({ exercise, preferredUnit }: ExerciseCardPr
 
   if (displayWeight != null && preferredUnit && preferredUnit !== displayUnit) {
     if (preferredUnit === "LBS" && displayUnit === "KG") {
-      displayWeight = displayWeight * 2.20462;
+      // Round to nearest 2.5 lbs (standard barbell/dumbbell loading increment)
+      displayWeight = Math.round((displayWeight * 2.20462) / 2.5) * 2.5;
       displayUnit = "LBS";
     } else if (preferredUnit === "KG" && displayUnit === "LBS") {
-      displayWeight = displayWeight * 0.453592;
+      // Round to nearest 0.5 kg
+      displayWeight = Math.round((displayWeight * 0.453592) / 0.5) * 0.5;
       displayUnit = "KG";
     }
   }
@@ -33,7 +35,10 @@ export default function ExerciseCard({ exercise, preferredUnit }: ExerciseCardPr
     `${exercise.sets} sets × ${exercise.reps} reps`,
   ];
   if (displayWeight != null) {
-    telemetryParts.push(`${displayWeight.toFixed(1)} ${displayUnit}`);
+    const formattedWeight = displayWeight % 1 === 0 
+      ? displayWeight.toFixed(0) 
+      : displayWeight.toFixed(1);
+    telemetryParts.push(`${formattedWeight} ${displayUnit}`);
   }
   if (exercise.targetRpe != null) {
     telemetryParts.push(`RPE ${exercise.targetRpe.toFixed(1)}`);
