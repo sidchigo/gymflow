@@ -312,6 +312,37 @@ export default function ProfileSettingsScreen({
         onSubmit={handleSave}
         className="flex-1 py-4 flex flex-col gap-6"
       >
+        {/* ── PWA Installation Support ─────────────────────────── */}
+        {!isInstalled && (installPromptEvent || isIOS) && (
+          <div className="rounded-xl border border-zinc-900 bg-zinc-950/20 p-3.5 flex items-center justify-between gap-4 text-left shrink-0">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <Smartphone size={12} className="text-violet-400 shrink-0" />
+                <span className="text-xs font-bold text-zinc-200">GymFlow App</span>
+              </div>
+              <p className="text-[10px] text-zinc-400 mt-0.5 leading-normal">
+                {isIOS 
+                  ? "Tap Safari Share → Add to Home Screen" 
+                  : "Install for standalone experience & offline access."}
+              </p>
+            </div>
+            {installPromptEvent ? (
+              <button
+                type="button"
+                onClick={handleInstallClick}
+                className="shrink-0 flex items-center justify-center gap-1 px-3 h-7.5 rounded-md bg-violet-600 text-[10px] font-extrabold text-white transition-all hover:bg-violet-500 active:scale-[0.98] outline-none cursor-pointer"
+              >
+                <Download size={11} />
+                Install
+              </button>
+            ) : isIOS ? (
+              <span className="shrink-0 text-[9px] text-zinc-400 font-mono border border-zinc-800 rounded px-1.5 py-0.5 bg-zinc-950/60 font-bold uppercase tracking-wider">
+                Safari
+              </span>
+            ) : null}
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Left Column: General Metrics, Nutrition, Combat, Modalities */}
           <div className="lg:col-span-5 flex flex-col gap-6">
@@ -554,44 +585,13 @@ export default function ProfileSettingsScreen({
           </div>
         </div>
 
-        {/* ── PWA Installation Support ─────────────────────────── */}
-        {!isInstalled && (installPromptEvent || isIOS) && (
-          <div className="rounded-xl border border-zinc-900 bg-zinc-950/20 p-3.5 flex items-center justify-between gap-4 text-left">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <Smartphone size={12} className="text-violet-400 shrink-0" />
-                <span className="text-xs font-bold text-zinc-200">GymFlow App</span>
-              </div>
-              <p className="text-[10px] text-zinc-400 mt-0.5 leading-normal">
-                {isIOS 
-                  ? "Tap Safari Share → Add to Home Screen" 
-                  : "Install for standalone experience & offline access."}
-              </p>
-            </div>
-            {installPromptEvent ? (
-              <button
-                type="button"
-                onClick={handleInstallClick}
-                className="shrink-0 flex items-center justify-center gap-1 px-3 h-7.5 rounded-md bg-violet-600 text-[10px] font-extrabold text-white transition-all hover:bg-violet-500 active:scale-[0.98] outline-none cursor-pointer"
-              >
-                <Download size={11} />
-                Install
-              </button>
-            ) : isIOS ? (
-              <span className="shrink-0 text-[9px] text-zinc-400 font-mono border border-zinc-800 rounded px-1.5 py-0.5 bg-zinc-950/60 font-bold uppercase tracking-wider">
-                Safari
-              </span>
-            ) : null}
-          </div>
-        )}
-
         {/* ── Actions ─────────────────────────────────────────────── */}
         <div className="border-t border-zinc-900/60 pt-5 pb-16 flex flex-col sm:flex-row gap-3 shrink-0">
           <button
             type="submit"
             id="settings-save-btn"
             disabled={saving}
-            className="flex-1 shrink-0 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-100 h-10 text-xs font-bold text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98] disabled:opacity-50 outline-none shadow-sm cursor-pointer"
+            className="w-full sm:flex-1 shrink-0 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-100 h-10 py-2.5 text-xs font-bold text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98] disabled:opacity-50 outline-none shadow-sm cursor-pointer"
           >
             <Save size={12} strokeWidth={2.5} />
             {saving ? "Saving..." : "Save Configuration"}
@@ -600,7 +600,7 @@ export default function ProfileSettingsScreen({
             type="button"
             id="settings-logout-btn"
             onClick={handleLogout}
-            className="flex-1 shrink-0 flex items-center justify-center gap-1.5 rounded-lg border border-red-950/30 bg-red-950/10 h-10 text-xs font-bold text-red-400/90 transition-all hover:bg-red-950/20 active:scale-[0.98] outline-none cursor-pointer"
+            className="w-full sm:flex-1 shrink-0 flex items-center justify-center gap-1.5 rounded-lg border border-red-950/30 bg-red-950/10 h-10 py-2.5 text-xs font-bold text-red-400/90 transition-all hover:bg-red-950/20 active:scale-[0.98] outline-none cursor-pointer"
           >
             <LogOut size={12} strokeWidth={2.5} />
             Log Out
