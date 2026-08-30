@@ -8,7 +8,7 @@
  */
 
 import { GoogleGenAI } from "@google/genai";
-import { OpenCodeZenProvider } from "./providers/opencode-provider";
+import { OpenAICompatibleProvider } from "./providers/openai-provider";
 
 // ---------------------------------------------------------------------------
 // 1. Interfaces & Types
@@ -280,9 +280,9 @@ export class GeminiLLMProvider implements LLMProvider {
  * Exposes the factory to resolve the active LLM provider from the environment.
  */
 export function getDefaultLLMProvider(): LLMProvider {
-  const providerType = process.env.LLM_PROVIDER || "opencode";
+  const providerType = process.env.LLM_PROVIDER || "openai";
   if (providerType === "gemini") {
     return new GeminiLLMProvider();
   }
-  return new OpenCodeZenProvider();
+  return new OpenAICompatibleProvider();
 }

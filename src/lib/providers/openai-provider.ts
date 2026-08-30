@@ -5,7 +5,7 @@ import {
   type LLMProvider,
 } from "../llm-provider";
 
-export class OpenCodeZenProvider implements LLMProvider {
+export class OpenAICompatibleProvider implements LLMProvider {
   private apiKey: string;
   private baseUrl: string;
   private defaultModel: string;
@@ -146,13 +146,13 @@ function lowercaseSchemaTypes(schema: any): any {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`OpenCode Zen API returned status ${response.status}: ${errorText}`);
+      throw new Error(`OpenAI Provider API returned status ${response.status}: ${errorText}`);
     }
 
     const data = await response.json();
     const choice = data.choices?.[0];
     if (!choice) {
-      throw new Error("Invalid response structure from OpenCode Zen API: no choices returned");
+      throw new Error("Invalid response structure from OpenAI Provider API: no choices returned");
     }
 
     const resText = choice.message?.content || "";
