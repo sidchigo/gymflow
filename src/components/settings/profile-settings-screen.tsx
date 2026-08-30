@@ -6,7 +6,6 @@ import {
   type AthleteProfile,
   type Modality,
   type DietPreference,
-  type WeightUnit,
 } from "@/types/agent";
 
 interface ProfileSettingsScreenProps {
@@ -69,10 +68,6 @@ const MODALITY_LABELS: Record<Modality, string> = {
   REST: "Rest",
 };
 
-const UNIT_OPTIONS = [
-  { value: "KG" as WeightUnit, label: "KG" },
-  { value: "LBS" as WeightUnit, label: "LBS" },
-] as const;
 
 /** Reusable glass segmented pill toggle */
 function SegmentedToggle<T extends string>({
@@ -118,9 +113,6 @@ export default function ProfileSettingsScreen({
   onSaveSuccess,
 }: ProfileSettingsScreenProps) {
   const [weight, setWeight] = useState(initialProfile?.weightKg ?? 74);
-  const [unit, setUnit] = useState<WeightUnit>(
-    initialProfile?.weightUnitPreference ?? "KG"
-  );
   const [height, setHeight] = useState(initialProfile?.heightCm ?? 178);
   const [diet, setDiet] = useState<DietPreference>(
     initialProfile?.dietaryPreference ?? "HIGH_PROTEIN_NON_VEG"
@@ -225,7 +217,7 @@ export default function ProfileSettingsScreen({
     const payload: Omit<AthleteProfile, "userId"> & { userId: string } = {
       userId: initialProfile?.userId ?? "temp-user",
       weightKg: weight,
-      weightUnitPreference: unit,
+      weightUnitPreference: "KG",
       heightCm: height,
       targetDaysPerWeek: 5,
       mandatoryCombatSessions: { kickboxing: kickboxingCount, bjj: bjjCount },
@@ -276,169 +268,194 @@ export default function ProfileSettingsScreen({
       {/* ─── Form ─────────────────────────────────────────────────── */}
       <form
         onSubmit={handleSave}
-        className="flex-1 py-4 space-y-5"
+        className="flex-1 py-4 flex flex-col gap-6"
       >
-        {/* ── General Metrics ─────────────────────────────────────── */}
-        <section className="space-y-3 pb-3 border-b border-zinc-900/40">
-          <div className="flex items-center gap-1.5 pb-1">
-            <User size={12} className="text-zinc-500" />
-            <h3 className="font-mono text-[9px] tracking-widest text-zinc-500 uppercase font-bold">
-              General Metrics
-            </h3>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label htmlFor="settings-weight" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
-                Weight
-              </label>
-              <div className="flex items-center gap-2 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 h-10 focus-within:border-zinc-700">
-                <input
-                  id="settings-weight"
-                  type="number"
-                  step="0.25"
-                  required
-                  value={weight}
-                  onChange={(e) => setWeight(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-transparent font-mono text-xs text-zinc-100 outline-none tabular-nums"
-                />
-                <div className="flex shrink-0 rounded-md border border-zinc-800 bg-zinc-950/60 p-0.5 gap-0.5">
-                  {UNIT_OPTIONS.map((opt) => {
-                    const isActive = opt.value === unit;
-                    return (
-                      <button
-                        key={opt.value}
-                        type="button"
-                        onClick={() => setUnit(opt.value)}
-                        className={[
-                          "rounded-[4px] px-1.5 py-0.5 font-mono text-[9px] font-extrabold tracking-wider transition-all duration-200 outline-none",
-                          isActive
-                            ? "bg-zinc-100 text-zinc-950 shadow-sm"
-                            : "text-zinc-555 hover:text-zinc-300",
-                        ].join(" ")}
-                      >
-                        {opt.label}
-                      </button>
-                    );
-                  })}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column: General Metrics, Nutrition, Combat, Modalities */}
+          <div className="lg:col-span-5 flex flex-col gap-6">
+            {/* ── General Metrics ─────────────────────────────────────── */}
+            <section className="space-y-3 pb-5 border-b border-zinc-900/40">
+              <div className="flex items-center gap-1.5 pb-1">
+                <User size={12} className="text-zinc-500" />
+                <h3 className="font-mono text-[9px] tracking-widest text-zinc-500 uppercase font-bold">
+                  General Metrics
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label htmlFor="settings-weight" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
+                    Weight (kg)
+                  </label>
+                  <div className="flex items-center gap-2 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 h-10 focus-within:border-zinc-700">
+                    <input
+                      id="settings-weight"
+                      type="number"
+                      step="0.25"
+                      required
+                      value={weight}
+                      onChange={(e) => setWeight(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-transparent font-mono text-xs text-zinc-100 outline-none tabular-nums"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="settings-height" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
+                    Height (cm)
+                  </label>
+                  <input
+                    id="settings-height"
+                    type="number"
+                    required
+                    value={height}
+                    onChange={(e) => setHeight(parseFloat(e.target.value) || 0)}
+                    className="w-full h-10 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 font-mono text-xs text-zinc-100 outline-none focus:border-zinc-700 transition-all tabular-nums"
+                  />
                 </div>
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="settings-height" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
-                Height (cm)
-              </label>
-              <input
-                id="settings-height"
-                type="number"
-                required
-                value={height}
-                onChange={(e) => setHeight(parseFloat(e.target.value) || 0)}
-                className="w-full h-10 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 font-mono text-xs text-zinc-100 outline-none focus:border-zinc-700 transition-all tabular-nums"
-              />
-            </div>
-          </div>
-        </section>
+            </section>
 
-        {/* ── Nutrition ───────────────────────────────────────────── */}
-        <section className="space-y-3 pb-3 border-b border-zinc-900/40">
-          <div className="flex items-center gap-1.5 pb-1">
-            <Apple size={12} className="text-zinc-500" />
-            <h3 className="font-mono text-[9px] tracking-widest text-zinc-500 uppercase font-bold">
-              Nutrition Settings
-            </h3>
-          </div>
-          <div className="space-y-1.5">
-            <label className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
-              Dietary Preference
-            </label>
-            <SegmentedToggle
-              id="settings-diet"
-              options={DIET_OPTIONS}
-              value={diet}
-              onChange={setDiet}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label htmlFor="settings-protein" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
-              Daily Protein Target (g)
-            </label>
-            <input
-              id="settings-protein"
-              type="number"
-              required
-              value={protein}
-              onChange={(e) => setProtein(parseInt(e.target.value) || 0)}
-              className="w-full h-10 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 font-mono text-xs text-zinc-100 outline-none focus:border-zinc-700 transition-all tabular-nums"
-            />
-          </div>
-        </section>
+            {/* ── Nutrition ───────────────────────────────────────────── */}
+            <section className="space-y-3 pb-5 border-b border-zinc-900/40">
+              <div className="flex items-center gap-1.5 pb-1">
+                <Apple size={12} className="text-zinc-500" />
+                <h3 className="font-mono text-[9px] tracking-widest text-zinc-500 uppercase font-bold">
+                  Nutrition Settings
+                </h3>
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
+                  Dietary Preference
+                </label>
+                <SegmentedToggle
+                  id="settings-diet"
+                  options={DIET_OPTIONS}
+                  value={diet}
+                  onChange={setDiet}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="settings-protein" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
+                  Daily Protein Target (g)
+                </label>
+                <input
+                  id="settings-protein"
+                  type="number"
+                  required
+                  value={protein}
+                  onChange={(e) => setProtein(parseInt(e.target.value) || 0)}
+                  className="w-full h-10 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 font-mono text-xs text-zinc-100 outline-none focus:border-zinc-700 transition-all tabular-nums"
+                />
+              </div>
+            </section>
 
-        {/* ── Combat Commitments ──────────────────────────────────── */}
-        <section className="space-y-3 pb-3 border-b border-zinc-900/40">
-          <div className="flex items-center gap-1.5 pb-1">
-            <Swords size={12} className="text-zinc-500" />
-            <h3 className="font-mono text-[9px] tracking-widest text-zinc-500 uppercase font-bold">
-              Combat Commitments / Week
-            </h3>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <label htmlFor="settings-kickboxing" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
-                Kickboxing
-              </label>
-              <input
-                id="settings-kickboxing"
-                type="number"
-                required
-                min={0}
-                max={7}
-                value={kickboxingCount}
-                onChange={(e) => setKickboxingCount(parseInt(e.target.value) || 0)}
-                className="w-full h-10 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 font-mono text-xs text-zinc-100 outline-none focus:border-zinc-700 transition-all tabular-nums"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="settings-bjj" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
-                BJJ
-              </label>
-              <input
-                id="settings-bjj"
-                type="number"
-                required
-                min={0}
-                max={7}
-                value={bjjCount}
-                onChange={(e) => setBjjCount(parseInt(e.target.value) || 0)}
-                className="w-full h-10 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 font-mono text-xs text-zinc-100 outline-none focus:border-zinc-700 transition-all tabular-nums"
-              />
-            </div>
-          </div>
-        </section>
+            {/* ── Combat Commitments ──────────────────────────────────── */}
+            <section className="space-y-3 pb-5 border-b border-zinc-900/40">
+              <div className="flex items-center gap-1.5 pb-1">
+                <Swords size={12} className="text-zinc-500" />
+                <h3 className="font-mono text-[9px] tracking-widest text-zinc-500 uppercase font-bold">
+                  Combat Commitments / Week
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label htmlFor="settings-kickboxing" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
+                    Kickboxing
+                  </label>
+                  <input
+                    id="settings-kickboxing"
+                    type="number"
+                    required
+                    min={0}
+                    max={7}
+                    value={kickboxingCount}
+                    onChange={(e) => setKickboxingCount(parseInt(e.target.value) || 0)}
+                    className="w-full h-10 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 font-mono text-xs text-zinc-100 outline-none focus:border-zinc-700 transition-all tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="settings-bjj" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
+                    BJJ
+                  </label>
+                  <input
+                    id="settings-bjj"
+                    type="number"
+                    required
+                    min={0}
+                    max={7}
+                    value={bjjCount}
+                    onChange={(e) => setBjjCount(parseInt(e.target.value) || 0)}
+                    className="w-full h-10 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 font-mono text-xs text-zinc-100 outline-none focus:border-zinc-700 transition-all tabular-nums"
+                  />
+                </div>
+              </div>
+            </section>
 
-        {/* ── Daily Work Schedule Matrix (Mon–Sun) ─────────────────── */}
-        <section className="space-y-3 pb-3 border-b border-zinc-900/40">
-          <div className="flex items-center gap-1.5 pb-1">
-            <Calendar size={12} className="text-zinc-500" />
-            <h3 className="font-mono text-[9px] tracking-widest text-zinc-500 uppercase font-bold">
-              Daily Work Schedule
-            </h3>
+            {/* ── Active Modalities ────────────────────────────────────── */}
+            <section className="space-y-3 pb-3">
+              <div className="flex items-center gap-1.5 pb-1">
+                <Dumbbell size={12} className="text-zinc-500" />
+                <h3 className="font-mono text-[9px] tracking-widest text-zinc-500 uppercase font-bold">
+                  Active Modalities
+                </h3>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {ALL_MODALITIES.map((modality) => {
+                  const selected = selectedModalities.includes(modality);
+                  return (
+                    <button
+                      key={modality}
+                      type="button"
+                      id={`modality-${modality}`}
+                      onClick={() => handleModalityToggle(modality)}
+                      className={[
+                        "flex items-center justify-between rounded-lg border px-3 py-2 text-xs font-bold text-left transition-all duration-205 outline-none",
+                        selected
+                          ? "bg-zinc-900 text-zinc-200 border-zinc-800"
+                          : "bg-zinc-950/30 text-zinc-655 border-zinc-950 hover:bg-zinc-900/10 hover:text-zinc-400",
+                      ].join(" ")}
+                    >
+                      <span>{MODALITY_LABELS[modality]}</span>
+                      <span
+                        className={[
+                          "h-2.5 w-2.5 rounded-full border flex-shrink-0 transition-all duration-200",
+                          selected
+                            ? "bg-zinc-200 border-zinc-200 scale-100"
+                            : "border-zinc-800 bg-transparent scale-90",
+                        ].join(" ")}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
           </div>
-          <div className="space-y-2">
-            {ALL_DAYS.map((day) => {
-              const item = schedule[day];
-              if (!item) return null;
-              const isWeekend = day === "Saturday" || day === "Sunday";
-              return (
+
+          {/* Right Column: Daily Work Schedule */}
+          <div className="lg:col-span-7 flex flex-col gap-6">
+            {/* ── Daily Work Schedule Matrix (Mon–Sun) ─────────────────── */}
+            <section className="space-y-3 pb-3">
+              <div className="flex items-center gap-1.5 pb-1">
+                <Calendar size={12} className="text-zinc-500" />
+                <h3 className="font-mono text-[9px] tracking-widest text-zinc-500 uppercase font-bold">
+                  Daily Work Schedule
+                </h3>
+              </div>
+              <div className="space-y-2">
+                {ALL_DAYS.map((day) => {
+                  const item = schedule[day];
+                  if (!item) return null;
+                  const isWeekend = day === "Saturday" || day === "Sunday";
+                  return (
                 <div
                   key={day}
-                  className="flex items-center justify-between rounded-lg border border-zinc-900 bg-zinc-950/20 px-3 py-2"
+                  className="flex items-center justify-between rounded-lg border border-zinc-900 bg-zinc-950/20 px-3 h-[52px]"
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="font-mono text-xs font-bold text-zinc-300">
                       {DAY_ABBREVS[day]}
                     </span>
                     {isWeekend && (
-                      <span className="font-mono text-[7px] text-zinc-650 uppercase tracking-wider">
+                      <span className="font-mono text-[7px] text-zinc-550 uppercase tracking-wider">
                         WE
                       </span>
                     )}
@@ -456,10 +473,10 @@ export default function ProfileSettingsScreen({
                             type="button"
                             onClick={() => handleScheduleModeToggle(day, mode)}
                             className={[
-                              "rounded-[4px] px-2.5 py-0.5 font-mono text-[9px] font-extrabold tracking-wider transition-all duration-200 outline-none",
+                              "rounded-[4px] px-4 py-1.5 font-mono text-xs font-extrabold tracking-wider transition-all duration-200 outline-none",
                               item.mode === mode
                                 ? "bg-zinc-100 text-zinc-950 font-extrabold shadow-sm"
-                                : "text-zinc-550 hover:text-zinc-300",
+                                : "text-zinc-500 hover:text-zinc-350",
                             ].join(" ")}
                           >
                             {mode}
@@ -468,7 +485,7 @@ export default function ProfileSettingsScreen({
                       </div>
                     )}
 
-                    <div className="flex items-center gap-1 rounded-md border border-zinc-900 bg-zinc-950/40 px-2 py-0.5">
+                    <div className="flex items-center gap-1 rounded-md border border-zinc-900 bg-zinc-950/40 px-2 py-1">
                       <Clock
                         size={9}
                         strokeWidth={2.5}
@@ -482,63 +499,26 @@ export default function ProfileSettingsScreen({
                           handleCommuteChange(day, parseInt(e.target.value) || 0)
                         }
                         aria-label={`${day} one-way commute minutes`}
-                        className="w-6 bg-transparent text-center font-mono text-[11px] font-bold text-zinc-350 outline-none tabular-nums"
+                        className="w-10 bg-transparent text-center font-mono text-[11px] font-bold text-zinc-350 outline-none border-none p-0 focus:ring-0 tabular-nums"
                       />
-                      <span className="font-mono text-[8px] text-zinc-605 shrink-0">m</span>
+                      <span className="font-mono text-[8px] text-zinc-600 shrink-0">m</span>
                     </div>
                   </div>
                 </div>
-              );
-            })}
+                  );
+                })}
+              </div>
+            </section>
           </div>
-        </section>
-
-        {/* ── Active Modalities ────────────────────────────────────── */}
-        <section className="space-y-3 pb-3">
-          <div className="flex items-center gap-1.5 pb-1">
-            <Dumbbell size={12} className="text-zinc-500" />
-            <h3 className="font-mono text-[9px] tracking-widest text-zinc-500 uppercase font-bold">
-              Active Modalities
-            </h3>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {ALL_MODALITIES.map((modality) => {
-              const selected = selectedModalities.includes(modality);
-              return (
-                <button
-                  key={modality}
-                  type="button"
-                  id={`modality-${modality}`}
-                  onClick={() => handleModalityToggle(modality)}
-                  className={[
-                    "flex items-center justify-between rounded-lg border px-3 py-2 text-xs font-bold text-left transition-all duration-205 outline-none",
-                    selected
-                      ? "bg-zinc-900 text-zinc-200 border-zinc-800"
-                      : "bg-zinc-950/30 text-zinc-655 border-zinc-950 hover:bg-zinc-900/10 hover:text-zinc-400",
-                  ].join(" ")}
-                >
-                  <span>{MODALITY_LABELS[modality]}</span>
-                  <span
-                    className={[
-                      "h-2.5 w-2.5 rounded-full border flex-shrink-0 transition-all duration-200",
-                      selected
-                        ? "bg-zinc-200 border-zinc-200 scale-100"
-                        : "border-zinc-800 bg-transparent scale-90",
-                    ].join(" ")}
-                  />
-                </button>
-              );
-            })}
-          </div>
-        </section>
+        </div>
 
         {/* ── Actions ─────────────────────────────────────────────── */}
-        <div className="border-t border-zinc-950 pt-5 pb-1 flex flex-col gap-2">
+        <div className="border-t border-zinc-900/60 pt-5 pb-1 flex flex-col sm:flex-row gap-3">
           <button
             type="submit"
             id="settings-save-btn"
             disabled={saving}
-            className="w-full flex items-center justify-center gap-1.5 rounded-lg bg-zinc-100 h-10 text-xs font-bold text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98] disabled:opacity-50 outline-none shadow-sm"
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-100 h-10 text-xs font-bold text-zinc-950 transition-all hover:bg-zinc-200 active:scale-[0.98] disabled:opacity-50 outline-none shadow-sm cursor-pointer"
           >
             <Save size={12} strokeWidth={2.5} />
             {saving ? "Saving..." : "Save Configuration"}
@@ -547,7 +527,7 @@ export default function ProfileSettingsScreen({
             type="button"
             id="settings-logout-btn"
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-1.5 rounded-lg border border-red-950/30 bg-red-950/10 h-10 text-xs font-bold text-red-400/90 transition-all hover:bg-red-950/20 active:scale-[0.98] outline-none"
+            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-red-950/30 bg-red-950/10 h-10 text-xs font-bold text-red-400/90 transition-all hover:bg-red-950/20 active:scale-[0.98] outline-none cursor-pointer"
           >
             <LogOut size={12} strokeWidth={2.5} />
             Log Out
@@ -557,6 +537,3 @@ export default function ProfileSettingsScreen({
     </div>
   );
 }
-
-
-

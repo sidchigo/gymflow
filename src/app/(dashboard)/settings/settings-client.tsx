@@ -16,7 +16,7 @@ export default function SettingsClient({ initialAthleteState }: SettingsClientPr
   };
 
   return (
-    <div className="flex-1 flex flex-col max-w-xl mx-auto w-full px-4 pt-4 pb-16 lg:py-6">
+    <div className="flex-1 flex flex-col max-w-xl lg:max-w-5xl mx-auto w-full px-4 pt-4 pb-16 lg:py-6">
       <ProfileSettingsScreen
         initialProfile={athleteState.profile}
         onSaveSuccess={handleSaveSuccess}
