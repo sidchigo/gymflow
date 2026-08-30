@@ -18,7 +18,9 @@ function loadEnv() {
         if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
           value = value.substring(1, value.length - 1);
         }
-        process.env[key] = value;
+        if (!process.env[key]) {
+          process.env[key] = value;
+        }
       }
     }
   }
@@ -191,8 +193,19 @@ describe("GymFlow Agent Scenarios Evaluation Suite", { concurrent: false }, () =
 
       // 1. Reset dynamic mock DB state
       const athleteState = JSON.parse(JSON.stringify(scenario.input.athleteState));
-      if (athleteState.profile && !athleteState.profile.modalities) {
-        athleteState.profile.modalities = ["BJJ", "KICKBOXING", "UPPER_HYPERTROPHY", "LOWER_STRENGTH", "REST"];
+      if (athleteState.profile) {
+        if (!athleteState.profile.modalities) {
+          athleteState.profile.modalities = ["BJJ", "KICKBOXING", "UPPER_HYPERTROPHY", "LOWER_STRENGTH", "REST"];
+        }
+        if (!athleteState.profile.weeklyWorkSchedule && athleteState.profile.workSchedule) {
+          // Normalize weekday casing in weeklyWorkSchedule
+          const workSched: Record<string, any> = {};
+          Object.entries(athleteState.profile.workSchedule).forEach(([key, val]) => {
+            const formattedKey = key.charAt(0).toUpperCase() + key.slice(1).toLowerCase();
+            workSched[formattedKey] = val;
+          });
+          athleteState.profile.weeklyWorkSchedule = workSched;
+        }
       }
       mockDb.athleteState = athleteState;
       mockDb.weeklySchedule = JSON.parse(JSON.stringify(scenario.input.weeklySchedule));
@@ -219,6 +232,8 @@ describe("GymFlow Agent Scenarios Evaluation Suite", { concurrent: false }, () =
             userMessage: scenario.input.userMessage,
           })
         );
+
+        console.log(`\n=== SCENARIO ${scenario.id} RESPONSE TEXT ===\n`, agentResponse.text, "\n==========================================");
 
         const executedCalls = agentResponse.toolCallsExecuted;
         scenarioResult.toolCalls = executedCalls.map((c) => c.name);

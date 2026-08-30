@@ -252,6 +252,53 @@
           { "mustNotContain": ["replan_week_schedule"] }
         ]
       }
+    },
+    {
+      "id": "SCENARIO_06_PROVISIONAL_FALLBACK_AND_TIMETABLE_SYNC",
+      "description": "When gym timetable is empty, agent must generate a provisional open-floor split and warn user that gym schedule is unpublished. When timetable is published, agent must bind exact verified class times and replan.",
+      "input": {
+        "currentDateTimeIST": "2026-08-30T17:00:00+05:30",
+        "userMessage": "Plan my training for next week",
+        "athleteState": {
+          "userId": "ath_test_sync",
+          "profile": {
+            "weightKg": 69.25,
+            "unitPreference": "KG",
+            "weeklyCommitments": { "kickboxingClasses": 1, "bjjClasses": 1 },
+            "workSchedule": {
+              "MONDAY": { "mode": "WFO", "commuteMinutesOneWay": 60 },
+              "TUESDAY": { "mode": "WFH", "commuteMinutesOneWay": 0 },
+              "WEDNESDAY": { "mode": "WFH", "commuteMinutesOneWay": 0 },
+              "THURSDAY": { "mode": "WFO", "commuteMinutesOneWay": 60 },
+              "FRIDAY": { "mode": "WFO", "commuteMinutesOneWay": 60 },
+              "SATURDAY": { "mode": "WFH", "commuteMinutesOneWay": 0 },
+              "SUNDAY": { "mode": "WFH", "commuteMinutesOneWay": 0 }
+            }
+          }
+        },
+        "weeklySchedule": {
+          "isoWeekId": "2026-W36",
+          "slots": []
+        }
+      },
+      "expectedAssertions": {
+        "toolCall": "replan_week_schedule",
+        "contentChecks": [
+          {
+            "mustContain": ["unpublished", "schedule"]
+          }
+        ],
+        "planRules": [
+          {
+            "condition": "plan.length === 7",
+            "message": "Generates complete 7-day structure"
+          },
+          {
+            "condition": "plan.find(d => d.date === '2026-09-06').modality === 'REST'",
+            "message": "Sunday remains Rest"
+          }
+        ]
+      }
     }
   ]
 }
