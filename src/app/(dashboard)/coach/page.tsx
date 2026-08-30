@@ -3,7 +3,14 @@ import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import CoachClient from "./coach-client";
 
-export default async function CoachPage() {
+interface CoachPageProps {
+  searchParams: Promise<{ prompt?: string }>;
+}
+
+export default async function CoachPage({ searchParams }: CoachPageProps) {
+  const params = await searchParams;
+  const initialPrompt = params.prompt;
+
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get("gymflow_session")?.value;
   let session = null;
@@ -20,5 +27,5 @@ export default async function CoachPage() {
     redirect("/login");
   }
 
-  return <CoachClient />;
+  return <CoachClient initialPrompt={initialPrompt} />;
 }

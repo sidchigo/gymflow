@@ -8,12 +8,12 @@ interface ChatInputProps {
   disabled?: boolean;
 }
 
-const QUICK_CHIPS: readonly { label: string; icon: string }[] = [
-  { label: "Replan Week", icon: "↺" },
-  { label: "Log Lift", icon: "+" },
-  { label: "Fever / Sick", icon: "!" },
-  { label: "30m Crunch", icon: "⚡" },
-  { label: "BJJ Swapped", icon: "↔" },
+const QUICK_CHIPS: readonly { label: string }[] = [
+  { label: "Sync Gym Schedule" },
+  { label: "Log Lift Performance" },
+  { label: "Time Crunch (30m)" },
+  { label: "Report Illness / Rest" },
+  { label: "Pre-Sparring Fuel" },
 ] as const;
 
 export default function ChatInput({ onSendMessage, disabled = false }: ChatInputProps) {
@@ -27,6 +27,24 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
     setInput("");
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      const trimmed = input.trim();
+      if (!trimmed || disabled) return;
+      onSendMessage(trimmed);
+      setInput("");
+      e.currentTarget.style.height = "auto";
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+    e.target.style.height = "auto";
+    e.target.style.height = `${Math.min(e.target.scrollHeight, 240)}px`;
+  };
+
   const handleChipClick = (label: string) => {
     if (disabled) return;
     onSendMessage(label);
@@ -34,8 +52,7 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
 
   return (
     <div
-      className="flex flex-col shrink-0 gap-3 px-4 pt-3 pb-5 pb-safe"
-      style={{ borderTop: "1px solid rgba(63,63,70,0.4)" }}
+      className="flex flex-col shrink-0 gap-3 px-4 pt-3 pb-0 pb-safe"
     >
       {/* ─── Quick Action Chips ───────────────────────────────────────── */}
       <div className="flex w-full overflow-x-auto no-scrollbar gap-2">
@@ -45,18 +62,8 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
             type="button"
             disabled={disabled}
             onClick={() => handleChipClick(chip.label)}
-            className="shrink-0 flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold text-zinc-300 transition-all hover:text-zinc-100 active:scale-95 disabled:opacity-40 outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40"
-            style={{
-              background: "#111520",
-              border: "1px solid rgba(63,63,70,0.7)",
-            }}
+            className="shrink-0 flex items-center justify-center rounded-full px-3.5 py-1.5 text-xs font-semibold text-zinc-300 transition-all hover:text-zinc-100 active:scale-95 disabled:opacity-40 outline-none backdrop-blur-md bg-zinc-950/40 border border-zinc-800/30"
           >
-            <span
-              className="text-violet-400 text-[10px] font-mono leading-none"
-              aria-hidden="true"
-            >
-              {chip.icon}
-            </span>
             {chip.label}
           </button>
         ))}
@@ -64,51 +71,28 @@ export default function ChatInput({ onSendMessage, disabled = false }: ChatInput
 
       {/* ─── Input + Send ────────────────────────────────────────────── */}
       <form onSubmit={handleSubmit} className="flex items-center gap-2.5">
-        <input
-          id="coach-chat-input"
-          type="text"
-          disabled={disabled}
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask coach or describe your situation..."
-          className="flex-1 rounded-xl px-4 py-2.5 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none transition-all disabled:opacity-40"
-          style={{
-            background: "#111520",
-            border: "1px solid rgba(63,63,70,0.7)",
-          }}
-          onFocus={(e) => {
-            (e.currentTarget as HTMLInputElement).style.borderColor =
-              "rgba(124,58,237,0.45)";
-            (e.currentTarget as HTMLInputElement).style.boxShadow =
-              "0 0 0 3px rgba(124,58,237,0.10)";
-          }}
-          onBlur={(e) => {
-            (e.currentTarget as HTMLInputElement).style.borderColor =
-              "rgba(63,63,70,0.7)";
-            (e.currentTarget as HTMLInputElement).style.boxShadow = "none";
-          }}
-        />
+        <div className="relative flex-1 flex items-center bg-white/5 backdrop-blur-md border border-zinc-800/40 rounded-[24px] overflow-hidden">
+          <textarea
+            id="coach-chat-input"
+            disabled={disabled}
+            value={input}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Type here"
+            rows={1}
+            className="flex-1 bg-transparent px-4 py-3 text-sm text-zinc-200 placeholder:text-zinc-600 outline-none resize-none no-scrollbar max-h-[240px] leading-relaxed align-middle"
+          />
+        </div>
 
         {/* Circular send button */}
         <button
           type="submit"
           id="coach-send-btn"
-          disabled={!input.trim() || disabled}
+          disabled={disabled || !input.trim()}
           aria-label="Send message"
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white transition-all active:scale-90 disabled:opacity-30 outline-none"
-          style={{
-            background: input.trim()
-              ? "linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)"
-              : "#111520",
-            border: input.trim()
-              ? "1px solid rgba(124,58,237,0.45)"
-              : "1px solid rgba(63,63,70,0.6)",
-            boxShadow: input.trim()
-              ? "0 0 16px rgba(124,58,237,0.35), 0 0 6px rgba(124,58,237,0.18)"
-              : "none",
-          }}
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white bg-zinc-900/60 border border-zinc-800/80 transition-all active:scale-90 outline-none disabled:opacity-40"
         >
-          <SendHorizontal size={15} strokeWidth={2.5} />
+          <SendHorizontal size={16} className="text-white" strokeWidth={2.5} />
         </button>
       </form>
     </div>

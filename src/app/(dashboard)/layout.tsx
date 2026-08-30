@@ -1,5 +1,6 @@
 import type { Viewport } from "next";
 import BottomNav from "@/components/navigation/bottom-nav";
+import GlobalHeader from "@/components/navigation/header";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -35,13 +36,7 @@ export default function DashboardLayout({ children }: LayoutProps) {
       />
       
       {/* Top Brand Bar */}
-      <header className="relative z-20 w-full shrink-0 border-b border-zinc-900/50 bg-zinc-950/20 backdrop-blur-md px-6 py-4 flex items-center justify-between">
-        <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
-          <span className="text-xl font-extrabold text-zinc-100 tracking-tight select-none">
-            GymFlow
-          </span>
-        </div>
-      </header>
+      <GlobalHeader />
 
       {/* Scrollable content layer */}
       <div className="relative z-10 flex flex-col flex-1">

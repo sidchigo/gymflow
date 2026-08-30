@@ -6,7 +6,14 @@ import { getOrSyncWeeklySchedule } from "@/lib/schedule-service";
 import { weekKey } from "@/lib/schedule-service";
 import DashboardClient from "./dashboard-client";
 
-export default async function DashboardPage() {
+interface PageProps {
+  searchParams: Promise<{ week?: string }>;
+}
+
+export default async function DashboardPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const targetWeek = params.week;
+
   // 1. Authenticate user from HttpOnly cookie
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get("gymflow_session")?.value;
@@ -35,7 +42,7 @@ export default async function DashboardPage() {
   // 3. Fetch weekly timetable schedule
   let scheduleStore = { slots: [], diffs: [], lastFetchedAt: new Date().toISOString() };
   try {
-    const syncResult = await getOrSyncWeeklySchedule(userId);
+    const syncResult = await getOrSyncWeeklySchedule(userId, { targetWeekId: targetWeek });
     scheduleStore = {
       slots: syncResult.store.slots as any,
       diffs: syncResult.store.diffs as any,
@@ -47,7 +54,7 @@ export default async function DashboardPage() {
 
   // 4. Fetch current weekly workout plan
   const now = new Date();
-  const isoWeekId = weekKey(now);
+  const isoWeekId = targetWeek || weekKey(now);
   const weeklyPlan = await getWeeklyWorkoutPlan(userId, isoWeekId);
 
   // 5. Render client dashboard
@@ -56,6 +63,8 @@ export default async function DashboardPage() {
       initialSchedule={scheduleStore}
       initialPlan={weeklyPlan}
       initialConfigured={true}
+      activeWeek={isoWeekId}
+      athleteState={athleteState}
     />
   );
 }

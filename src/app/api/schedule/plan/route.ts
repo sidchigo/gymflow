@@ -9,8 +9,11 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "UNAUTHENTICATED" }, { status: 401 });
   }
 
+  const { searchParams } = new URL(request.url);
+  const weekParam = searchParams.get("week");
+
   const now = new Date();
-  const isoWeekId = weekKey(now);
+  const isoWeekId = weekParam || weekKey(now);
   const plan = await getWeeklyWorkoutPlan(session.userId, isoWeekId);
 
   return NextResponse.json({ plan }, { status: 200 });
