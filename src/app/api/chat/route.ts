@@ -3,7 +3,7 @@ import { getSessionFromRequest } from "@/lib/session";
 import { runCoachAgentStream } from "@/lib/agent-engine";
 import { type LLMMessage } from "@/lib/llm-provider";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest): Promise<Response> {
@@ -34,7 +34,7 @@ export async function POST(request: NextRequest): Promise<Response> {
     async start(controller) {
       let timeoutId: any;
       const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("Timeout")), 45000);
+        timeoutId = setTimeout(() => reject(new Error("Timeout")), 180000);
       });
 
       try {
@@ -49,9 +49,24 @@ export async function POST(request: NextRequest): Promise<Response> {
                 controller.enqueue(encoder.encode(data));
               } else if (event.type === "tool_start") {
                 let msg = "Analyzing request...";
-                if (event.name === "replan_week_schedule") msg = "Syncing schedule...";
-                else if (event.name === "log_lift_performance") msg = "Logging workout...";
-                else if (event.name === "log_athlete_event") msg = "Saving event...";
+                if (event.name === "replan_week_schedule") {
+                  const plan = event.args?.plan as Array<{ modality: string }> | undefined;
+                  if (plan && plan.length > 0) {
+                    const modalities = Array.from(
+                      new Set(plan.map((p) => p.modality).filter((m) => m !== "REST" && m !== "MOBILITY_RECOVERY"))
+                    );
+                    msg = `Updating weekly schedule split (${modalities.join(", ")})...`;
+                  } else {
+                    msg = "Syncing and updating weekly schedule split...";
+                  }
+                } else if (event.name === "log_lift_performance") {
+                  const exercise = event.args?.exerciseName || "workout";
+                  const setsCount = (event.args?.sets as any[])?.length || 0;
+                  msg = `Logging workout: ${exercise} (${setsCount} sets)...`;
+                } else if (event.name === "log_athlete_event") {
+                  const eventType = (event.args?.type as string) || "constraint";
+                  msg = `Logging constraint event: ${eventType.toLowerCase()}...`;
+                }
                 const data = `data: ${JSON.stringify({ type: "status", message: msg })}\n\n`;
                 controller.enqueue(encoder.encode(data));
               } else if (event.type === "tool_end") {

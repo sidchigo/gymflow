@@ -72,7 +72,7 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
     }));
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 50000);
+    const timeoutId = setTimeout(() => controller.abort(), 190000);
 
     // Initialize/Reset refs for the current message
     targetTextRef.current = "";
