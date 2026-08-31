@@ -144,15 +144,15 @@ export const PlannedExerciseSchema = z.object({
   name: z.string().min(1),
   sets: z.number().int().positive(),
   reps: z.string().min(1),
-  targetWeight: z.number().nonnegative().optional().nullable(),
-  unit: WeightUnitSchema.optional(),
-  weightKg: z.number().nonnegative().optional().nullable(),
-  weightLbs: z.number().nonnegative().optional().nullable(),
-  targetRpe: z.number().min(1).max(10).optional().nullable(),
-  restSeconds: z.number().int().nonnegative(),
-  supersetGroupId: z.string().optional().nullable(),
-  orderInGroup: z.number().int().positive().optional().nullable(),
-  progressionNote: z.string().optional().nullable(),
+  targetWeight: z.number().nonnegative().nullable().default(null),
+  unit: WeightUnitSchema.default("KG"),
+  weightKg: z.number().nonnegative().nullable().default(null),
+  weightLbs: z.number().nonnegative().nullable().default(null),
+  targetRpe: z.number().min(1).max(10).nullable().default(null),
+  restSeconds: z.number().int().nonnegative().default(90),
+  supersetGroupId: z.string().nullable().default(null),
+  orderInGroup: z.number().int().positive().nullable().default(null),
+  progressionNote: z.string().nullable().default(null),
 });
 export type PlannedExercise = z.infer<typeof PlannedExerciseSchema>;
 
@@ -162,9 +162,9 @@ export const DailyWorkoutPlanSchema = z.object({
   focus: z.string().min(1),
   modality: ModalitySchema,
   isGymClass: z.boolean(),
-  gymSlotId: z.string().optional().nullable(),
+  gymSlotId: z.string().nullable().default(null),
   plannedTime: z.string().regex(/^\d{2}:\d{2}$/), // HH:mm
-  estimatedDurationMinutes: z.number().nonnegative().optional().nullable(),
+  estimatedDurationMinutes: z.number().nonnegative().nullable().default(null),
   exercises: z.array(PlannedExerciseSchema),
   nutritionAdvice: z.string(),
 });
@@ -182,20 +182,7 @@ export type WeeklyWorkoutPlan = z.infer<typeof WeeklyWorkoutPlanSchema>;
 // ---------------------------------------------------------------------------
 
 export const ReplanWeekScheduleArgsSchema = z.object({
-  plan: z.array(
-    z.object({
-      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-      day: z.string().min(1),
-      focus: z.string().min(1),
-      modality: ModalitySchema,
-      isGymClass: z.boolean(),
-      gymSlotId: z.string().optional().nullable(),
-      plannedTime: z.string().regex(/^\d{2}:\d{2}$/),
-      estimatedDurationMinutes: z.number().nonnegative().optional().nullable(),
-      exercises: z.array(PlannedExerciseSchema),
-      nutritionAdvice: z.string(),
-    })
-  ),
+  plan: z.array(DailyWorkoutPlanSchema),
   reasoning: z.string(),
 });
 

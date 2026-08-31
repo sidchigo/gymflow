@@ -44,12 +44,25 @@ export async function POST(request: NextRequest): Promise<Response> {
             userMessage: message,
             chatHistory: history,
             onEvent: (event) => {
-              const data = JSON.stringify(event) + "\n";
-              controller.enqueue(encoder.encode(data));
+              if (event.type === "text" && event.text) {
+                const data = `data: ${JSON.stringify({ type: "token", content: event.text })}\n\n`;
+                controller.enqueue(encoder.encode(data));
+              } else if (event.type === "tool_start") {
+                let msg = "Analyzing request...";
+                if (event.name === "replan_week_schedule") msg = "Syncing schedule...";
+                else if (event.name === "log_lift_performance") msg = "Logging workout...";
+                else if (event.name === "log_athlete_event") msg = "Saving event...";
+                const data = `data: ${JSON.stringify({ type: "status", message: msg })}\n\n`;
+                controller.enqueue(encoder.encode(data));
+              } else if (event.type === "tool_end") {
+                const data = `data: ${JSON.stringify({ type: "status", message: "" })}\n\n`;
+                controller.enqueue(encoder.encode(data));
+              }
             },
           }),
           timeoutPromise,
         ]);
+        controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (err: any) {
         console.error(`[api/chat] error in agent stream for userId=${userId}:`, err);
         
@@ -57,10 +70,10 @@ export async function POST(request: NextRequest): Promise<Response> {
         const rawMessage = err?.message || "";
         
         if (err.message === "Timeout") {
-          const timeoutEvent = JSON.stringify({
+          const timeoutEvent = `data: ${JSON.stringify({
             error: "Generation timed out. Please try a more specific request.",
             planUpdated: false,
-          }) + "\n";
+          })}\n\n`;
           controller.enqueue(encoder.encode(timeoutEvent));
           return;
         }
@@ -87,10 +100,9 @@ export async function POST(request: NextRequest): Promise<Response> {
           }
         }
 
-        const errEvent = JSON.stringify({
-          type: "text",
-          text: `\n\n[Coach System Error: ${displayError}]`,
-        }) + "\n";
+        const errEvent = `data: ${JSON.stringify({
+          error: displayError,
+        })}\n\n`;
         controller.enqueue(encoder.encode(errEvent));
       } finally {
         if (timeoutId) {
@@ -103,9 +115,10 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "application/x-ndjson",
+      "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       "Connection": "keep-alive",
+      "X-Accel-Buffering": "no",
     },
   });
 }

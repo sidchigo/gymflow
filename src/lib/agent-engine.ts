@@ -483,33 +483,40 @@ export async function runCoachAgent(params: {
 
       // Execute each tool call
       const responseParts: LLMMessage["parts"] = [];
+      let toolFailed = false;
+      let toolFailureMessage = "";
 
       for (const call of completion.toolCalls) {
         let executionResult: string;
         try {
           if (call.name === "replan_week_schedule") {
-            const args = ReplanWeekScheduleArgsSchema.parse(call.args);
-            const fullPlan: WeeklyWorkoutPlan = {
-              plan: args.plan,
-              reasoning: args.reasoning,
-              updatedAt: nowIST(),
-            };
-            await saveWeeklyWorkoutPlan(userId, isoWeekId, fullPlan);
-            currentPlanDoc = fullPlan; // Reassign locally to update system prompt in next iteration
+            try {
+              const args = ReplanWeekScheduleArgsSchema.parse(call.args);
+              const fullPlan: WeeklyWorkoutPlan = {
+                plan: args.plan,
+                reasoning: args.reasoning,
+                updatedAt: nowIST(),
+              };
+              await saveWeeklyWorkoutPlan(userId, isoWeekId, fullPlan);
+              currentPlanDoc = fullPlan; // Reassign locally to update system prompt in next iteration
 
-            // Clear schedule diffs once a plan has been updated/synced to resolve notification banner
-            const storeKey = scheduleWeekKey(isoWeekId);
-            const store = await getWeeklyStore(storeKey);
-            if (store) {
-              store.diffs = [];
-              await saveWeeklyStore(storeKey, store);
-              weeklyGymStore = store; // Reassign locally to update system prompt in next iteration
+              // Clear schedule diffs once a plan has been updated/synced to resolve notification banner
+              const storeKey = scheduleWeekKey(isoWeekId);
+              const store = await getWeeklyStore(storeKey);
+              if (store) {
+                store.diffs = [];
+                await saveWeeklyStore(storeKey, store);
+                weeklyGymStore = store; // Reassign locally to update system prompt in next iteration
+              }
+
+              executionResult = JSON.stringify({
+                success: true,
+                message: "Weekly plan successfully generated/updated and saved to Redis.",
+              });
+            } catch (err) {
+              console.error("[TOOL_ERROR: replan_week_schedule]", err);
+              throw err;
             }
-
-            executionResult = JSON.stringify({
-              success: true,
-              message: "Weekly plan successfully generated/updated and saved to Redis.",
-            });
           } else if (call.name === "log_lift_performance") {
             const args = LogLiftPerformanceArgsSchema.parse(call.args);
             athleteState.lifts.push({
@@ -548,8 +555,10 @@ export async function runCoachAgent(params: {
             });
           }
         } catch (err: any) {
+          toolFailed = true;
+          toolFailureMessage = err.message || "Failed to execute tool";
           executionResult = JSON.stringify({
-            error: err.message || "Failed to execute tool",
+            error: toolFailureMessage,
           });
         }
 
@@ -565,6 +574,13 @@ export async function runCoachAgent(params: {
             response: JSON.parse(executionResult),
           },
         });
+      }
+
+      if (toolFailed) {
+        return {
+          text: `[Coach System Error: Tool execution failed: ${toolFailureMessage}]`,
+          toolCallsExecuted,
+        };
       }
 
       // Append function responses to the thread and continue loop
@@ -728,6 +744,8 @@ export async function runCoachAgentStream(params: {
       });
 
       const responseParts: LLMMessage["parts"] = [];
+      let toolFailed = false;
+      let toolFailureMessage = "";
 
       for (const call of toolCalls) {
         onEvent({ type: "tool_start", name: call.name, args: call.args });
@@ -735,28 +753,33 @@ export async function runCoachAgentStream(params: {
         let executionResult: string;
         try {
           if (call.name === "replan_week_schedule") {
-            const args = ReplanWeekScheduleArgsSchema.parse(call.args);
-            const fullPlan: WeeklyWorkoutPlan = {
-              plan: args.plan,
-              reasoning: args.reasoning,
-              updatedAt: nowIST(),
-            };
-            await saveWeeklyWorkoutPlan(userId, isoWeekId, fullPlan);
-            currentPlanDoc = fullPlan; // Reassign locally to update system prompt in next iteration
+            try {
+              const args = ReplanWeekScheduleArgsSchema.parse(call.args);
+              const fullPlan: WeeklyWorkoutPlan = {
+                plan: args.plan,
+                reasoning: args.reasoning,
+                updatedAt: nowIST(),
+              };
+              await saveWeeklyWorkoutPlan(userId, isoWeekId, fullPlan);
+              currentPlanDoc = fullPlan; // Reassign locally to update system prompt in next iteration
 
-            // Clear schedule diffs once a plan has been updated/synced to resolve notification banner
-            const storeKey = scheduleWeekKey(isoWeekId);
-            const store = await getWeeklyStore(storeKey);
-            if (store) {
-              store.diffs = [];
-              await saveWeeklyStore(storeKey, store);
-              weeklyGymStore = store; // Reassign locally to update system prompt in next iteration
+              // Clear schedule diffs once a plan has been updated/synced to resolve notification banner
+              const storeKey = scheduleWeekKey(isoWeekId);
+              const store = await getWeeklyStore(storeKey);
+              if (store) {
+                store.diffs = [];
+                await saveWeeklyStore(storeKey, store);
+                weeklyGymStore = store; // Reassign locally to update system prompt in next iteration
+              }
+
+              executionResult = JSON.stringify({
+                success: true,
+                message: "Weekly plan successfully generated/updated and saved to Redis.",
+              });
+            } catch (err) {
+              console.error("[TOOL_ERROR: replan_week_schedule]", err);
+              throw err;
             }
-
-            executionResult = JSON.stringify({
-              success: true,
-              message: "Weekly plan successfully generated/updated and saved to Redis.",
-            });
           } else if (call.name === "log_lift_performance") {
             const args = LogLiftPerformanceArgsSchema.parse(call.args);
             athleteState.lifts.push({
@@ -795,8 +818,10 @@ export async function runCoachAgentStream(params: {
             });
           }
         } catch (err: any) {
+          toolFailed = true;
+          toolFailureMessage = err.message || "Failed to execute tool";
           executionResult = JSON.stringify({
-            error: err.message || "Failed to execute tool",
+            error: toolFailureMessage,
           });
         }
 
@@ -814,6 +839,13 @@ export async function runCoachAgentStream(params: {
             response: JSON.parse(executionResult),
           },
         });
+      }
+
+      if (toolFailed) {
+        return {
+          text: `[Coach System Error: Tool execution failed: ${toolFailureMessage}]`,
+          toolCallsExecuted,
+        };
       }
 
       messages.push({

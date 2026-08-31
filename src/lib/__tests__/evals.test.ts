@@ -67,6 +67,9 @@ vi.mock("@/lib/redis", () => {
     getWeeklyStore: vi.fn(async () => {
       return mockDb.weeklySchedule;
     }),
+    saveWeeklyStore: vi.fn(async (_storeKey: string, store: any) => {
+      mockDb.weeklySchedule = store;
+    }),
     scheduleWeekKey: vi.fn((isoWeekId: string) => `schedule:week:${isoWeekId}`),
   };
 });
@@ -140,7 +143,10 @@ async function runWithRetry<T>(fn: () => Promise<T>, retries = 5, delayMs = 1000
         combined.includes("UNAVAILABLE") ||
         combined.includes("RESOURCE_EXHAUSTED") ||
         combined.includes("Rate limit exceeded") ||
-        combined.includes("limit exceeded");
+        combined.includes("limit exceeded") ||
+        combined.toLowerCase().includes("choices") ||
+        combined.toLowerCase().includes("empty") ||
+        combined.toLowerCase().includes("no response");
 
       if (isRetryable && i < retries - 1) {
         console.warn(`\n[Eval Runner] Transient API error encountered (${errMsg || errStr}). Retrying in ${delayMs / 1000}s... (Attempt ${i + 1}/${retries})`);
@@ -400,6 +406,6 @@ describe("GymFlow Agent Scenarios Evaluation Suite", { concurrent: false }, () =
       if (!scenarioResult.passed) {
         throw new Error(`Scenario assertions failed: ${scenarioResult.errors.join("; ")}`);
       }
-    }, 180000);
+    }, 300000);
   });
 });

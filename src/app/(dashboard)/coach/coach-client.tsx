@@ -14,6 +14,50 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const initPromptRef = useRef(false);
 
+  // Refs for smooth word-by-word streaming animation
+  const targetTextRef = useRef("");
+  const displayedTextRef = useRef("");
+  const activeAgentMsgIdRef = useRef<string | null>(null);
+  const isStreamActiveRef = useRef(false);
+
+  // Easing buffer ticker
+  useEffect(() => {
+    const tick = () => {
+      if (!activeAgentMsgIdRef.current) return;
+
+      const target = targetTextRef.current;
+      const current = displayedTextRef.current;
+
+      if (current.length < target.length) {
+        const remaining = target.slice(current.length);
+        let nextChunk = "";
+        const spaceIndex = remaining.indexOf(" ");
+        if (spaceIndex !== -1) {
+          nextChunk = remaining.substring(0, spaceIndex + 1);
+        } else {
+          nextChunk = remaining;
+        }
+        displayedTextRef.current += nextChunk;
+
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === activeAgentMsgIdRef.current
+              ? { ...m, text: displayedTextRef.current }
+              : m
+          )
+        );
+      } else if (!isStreamActiveRef.current) {
+        // Stream finished and animation caught up
+        setIsGenerating(false);
+        setExecutingTool(null);
+        activeAgentMsgIdRef.current = null;
+      }
+    };
+
+    const intervalId = setInterval(tick, 15);
+    return () => clearInterval(intervalId);
+  }, []);
+
   const handleSendMessage = async (text: string) => {
     setIsGenerating(true);
     const userMsgId = Math.random().toString();
@@ -29,6 +73,12 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 50000);
+
+    // Initialize/Reset refs for the current message
+    targetTextRef.current = "";
+    displayedTextRef.current = "";
+    activeAgentMsgIdRef.current = agentMsgId;
+    isStreamActiveRef.current = true;
 
     try {
       const response = await fetch("/api/chat", {
@@ -52,7 +102,6 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
-      let accumulatedText = "";
 
       while (true) {
         const { done, value } = await reader.read();
@@ -63,29 +112,30 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
         buffer = lines.pop() ?? "";
 
         for (const line of lines) {
-          if (!line.trim()) continue;
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          if (!trimmed.startsWith("data: ")) continue;
+          
+          const dataStr = trimmed.slice(6).trim();
+          if (dataStr === "[DONE]") {
+            break;
+          }
+
           try {
-            const event = JSON.parse(line);
+            const event = JSON.parse(dataStr);
             if (event.error) {
               throw new Error(event.error);
             }
-            if (event.type === "text" && event.text) {
-              accumulatedText += event.text;
-              setMessages((prev) =>
-                prev.map((m) =>
-                  m.id === agentMsgId ? { ...m, text: accumulatedText } : m
-                )
-              );
-            } else if (event.type === "tool_start") {
-              setExecutingTool(event.name);
-            } else if (event.type === "tool_end") {
-              setExecutingTool(null);
+            if (event.type === "token" && event.content) {
+              targetTextRef.current += event.content;
+            } else if (event.type === "status") {
+              setExecutingTool(event.message || null);
             }
           } catch (e) {
             if (e instanceof Error && e.message.includes("timed out")) {
               throw e;
             }
-            console.error("Failed to parse NDJSON token stream:", e);
+            console.error("Failed to parse SSE token stream:", e);
           }
         }
       }
@@ -106,17 +156,10 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
         ? "Coach response timed out. Please tap 'Sync Gym Schedule' or try again."
         : `[Coach communication interrupted: ${message}]`;
 
-      setMessages((prev) =>
-        prev.map((m) =>
-          m.id === agentMsgId
-            ? { ...m, text: m.text ? m.text + "\n\n" + displayMessage : displayMessage }
-            : m
-        )
-      );
+      targetTextRef.current += (targetTextRef.current ? "\n\n" : "") + displayMessage;
     } finally {
       clearTimeout(timeoutId);
-      setExecutingTool(null);
-      setIsGenerating(false);
+      isStreamActiveRef.current = false;
     }
   };
 
