@@ -27,11 +27,15 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
       parts: [{ text: m.text }],
     }));
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 50000);
+
     try {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text, history: historyPayload }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -62,6 +66,9 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
           if (!line.trim()) continue;
           try {
             const event = JSON.parse(line);
+            if (event.error) {
+              throw new Error(event.error);
+            }
             if (event.type === "text" && event.text) {
               accumulatedText += event.text;
               setMessages((prev) =>
@@ -75,6 +82,9 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
               setExecutingTool(null);
             }
           } catch (e) {
+            if (e instanceof Error && e.message.includes("timed out")) {
+              throw e;
+            }
             console.error("Failed to parse NDJSON token stream:", e);
           }
         }
@@ -82,14 +92,29 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Unknown error";
       console.error("Stream reader failed:", err);
+      
+      const isTimeoutOrAbort = 
+        message.includes("timed out") || 
+        message.includes("Timeout") ||
+        message.includes("504") ||
+        message.includes("500") ||
+        (err instanceof DOMException && err.name === "AbortError") ||
+        (err instanceof Error && err.name === "AbortError") ||
+        message.toLowerCase().includes("abort");
+
+      const displayMessage = isTimeoutOrAbort
+        ? "Coach response timed out. Please tap 'Sync Gym Schedule' or try again."
+        : `[Coach communication interrupted: ${message}]`;
+
       setMessages((prev) =>
         prev.map((m) =>
           m.id === agentMsgId
-            ? { ...m, text: m.text + `\n\n[Coach communication interrupted: ${message}]` }
+            ? { ...m, text: m.text ? m.text + "\n\n" + displayMessage : displayMessage }
             : m
         )
       );
     } finally {
+      clearTimeout(timeoutId);
       setExecutingTool(null);
       setIsGenerating(false);
     }

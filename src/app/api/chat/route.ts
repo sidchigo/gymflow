@@ -3,6 +3,9 @@ import { getSessionFromRequest } from "@/lib/session";
 import { runCoachAgentStream } from "@/lib/agent-engine";
 import { type LLMMessage } from "@/lib/llm-provider";
 
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest): Promise<Response> {
   // 1. Authenticate user
   const session = await getSessionFromRequest(request);
@@ -29,22 +32,39 @@ export async function POST(request: NextRequest): Promise<Response> {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      let timeoutId: any;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("Timeout")), 45000);
+      });
+
       try {
-        await runCoachAgentStream({
-          userId,
-          userMessage: message,
-          chatHistory: history,
-          onEvent: (event) => {
-            const data = JSON.stringify(event) + "\n";
-            controller.enqueue(encoder.encode(data));
-          },
-        });
+        await Promise.race([
+          runCoachAgentStream({
+            userId,
+            userMessage: message,
+            chatHistory: history,
+            onEvent: (event) => {
+              const data = JSON.stringify(event) + "\n";
+              controller.enqueue(encoder.encode(data));
+            },
+          }),
+          timeoutPromise,
+        ]);
       } catch (err: any) {
         console.error(`[api/chat] error in agent stream for userId=${userId}:`, err);
         
         let displayError = "An unexpected error occurred during execution.";
         const rawMessage = err?.message || "";
         
+        if (err.message === "Timeout") {
+          const timeoutEvent = JSON.stringify({
+            error: "Generation timed out. Please try a more specific request.",
+            planUpdated: false,
+          }) + "\n";
+          controller.enqueue(encoder.encode(timeoutEvent));
+          return;
+        }
+
         if (
           rawMessage.includes("RESOURCE_EXHAUSTED") || 
           rawMessage.includes("quota exceeded") || 
@@ -73,6 +93,9 @@ export async function POST(request: NextRequest): Promise<Response> {
         }) + "\n";
         controller.enqueue(encoder.encode(errEvent));
       } finally {
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
         controller.close();
       }
     },

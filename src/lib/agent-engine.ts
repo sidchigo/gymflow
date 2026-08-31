@@ -262,6 +262,7 @@ GROUND TRUTH RULES:
    - WFH days: there is no office commute, so the athlete can head to the gym before work ends and be ready at work-end. Sessions at or after work-end are allowed (e.g. work ends 18:00 → 18:00, 18:30 or 19:00 all fine; the 30m home->gym commute just tells you to leave by ~17:30 for an 18:00 class). Never schedule at a time inside the work window (e.g. 17:30 when work ends 18:00).
    - Honor the training time preference: MORNING = sessions before work-start (e.g. from (work-start - commute) for WFO, or work-start for WFH, scheduling mornings only); EVENING = sessions at the earliest feasible end-of-day time (stated above) or later; BOTH = either window is acceptable. For class activities, pick the available gym slot closest to the preferred window; if the only class falls inside work hours or before the commute-adjusted earliest time, pick the earliest/latest feasible slot and note the conflict to the user instead of silently scheduling mid-workday. Always leave margin for the commute between home/office and the gym.
 4. You MUST NOT modify the weekly plan or log workout performance in plain text. Any plan creation, modification, lift logging, or event logging MUST be done by calling the appropriate tool.
+4a. When the user asks to replan, generate, or adjust a schedule, construct the full 7-day array and call \`replan_week_schedule\` EXACTLY ONCE. Immediately after \`replan_week_schedule\` executes, output your final formatted text response summarizing the changes and STOP. Do not call any further tools.
 5. Saturday can only be scheduled for morning sessions, and ONLY if a weekday workout was missed or requested. Sunday is strictly REST (no workouts).
 6. When a scheduled combat session (BJJ/KB) is cancelled, replace it with an alternative conditioning (KB/Boxing/DUT/TRX) or strength session that maintains the 5-day training goal.
 7. You MUST NOT render full weekly calendar grids, Markdown tables, or full day-by-day schedules in your text response. The user interface already has a dedicated schedule viewer for this. Instead, focus on a brief coaching explanation of the changes or the plan rationale.
@@ -394,7 +395,9 @@ export async function runCoachAgent(params: {
 
   const toolCallsExecuted: AgentResult["toolCallsExecuted"] = [];
   let loopCount = 0;
-  const maxLoops = 20;
+  const maxLoops = 4;
+  let lastToolCallKey: string | null = null;
+  let lastCompletionText = "";
 
   while (loopCount < maxLoops) {
     loopCount++;
@@ -455,9 +458,18 @@ export async function runCoachAgent(params: {
     }
 
     const completion = await provider.generateCompletion(completionParams);
+    if (completion.text) {
+      lastCompletionText = completion.text;
+    }
 
     // Check if the LLM returned tool calls
     if (completion.toolCalls && completion.toolCalls.length > 0) {
+      const currentCallKey = completion.toolCalls.map((tc) => `${tc.name}:${JSON.stringify(tc.args)}`).join("|");
+      if (lastToolCallKey === currentCallKey) {
+        break;
+      }
+      lastToolCallKey = currentCallKey;
+
       // Append model message to history
       messages.push({
         role: "model",
@@ -569,7 +581,10 @@ export async function runCoachAgent(params: {
     }
   }
 
-  throw new Error("Coach agent execution exceeded maximum tool calling loops.");
+  return {
+    text: lastCompletionText || "No response text generated.",
+    toolCallsExecuted,
+  };
 }
 
 export async function runCoachAgentStream(params: {
@@ -615,7 +630,8 @@ export async function runCoachAgentStream(params: {
 
   const toolCallsExecuted: AgentResult["toolCallsExecuted"] = [];
   let loopCount = 0;
-  const maxLoops = 20;
+  const maxLoops = 4;
+  let lastToolCallKey: string | null = null;
   let finalResponseText = "";
 
   while (loopCount < maxLoops) {
@@ -695,6 +711,12 @@ export async function runCoachAgentStream(params: {
     }
 
     if (toolCalls.length > 0) {
+      const currentCallKey = toolCalls.map((tc) => `${tc.name}:${JSON.stringify(tc.args)}`).join("|");
+      if (lastToolCallKey === currentCallKey) {
+        break;
+      }
+      lastToolCallKey = currentCallKey;
+
       messages.push({
         role: "model",
         parts: toolCalls.map((tc) => ({
@@ -806,5 +828,8 @@ export async function runCoachAgentStream(params: {
     }
   }
 
-  throw new Error("Coach agent execution exceeded maximum tool calling loops.");
+  return {
+    text: finalResponseText || "No response text generated.",
+    toolCallsExecuted,
+  };
 }
