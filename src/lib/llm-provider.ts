@@ -60,6 +60,7 @@ export interface LLMProvider {
     temperature?: number | undefined;
     maxTokens?: number | undefined;
     toolChoice?: any | undefined;
+    response_format?: any | undefined;
   }): Promise<LLMResponse>;
   generateCompletionStream?(params: {
     messages: LLMMessage[];
@@ -68,6 +69,7 @@ export interface LLMProvider {
     temperature?: number | undefined;
     maxTokens?: number | undefined;
     toolChoice?: any | undefined;
+    response_format?: any | undefined;
   }): AsyncGenerator<{
     text?: string | undefined;
     toolCalls?: Array<{ id?: string; name: string; args: Record<string, unknown> }> | undefined;
@@ -105,6 +107,7 @@ export class GeminiLLMProvider implements LLMProvider {
     temperature?: number | undefined;
     maxTokens?: number | undefined;
     toolChoice?: any | undefined;
+    response_format?: any | undefined;
   }): Promise<LLMResponse> {
     const modelName = params.model || this.defaultModel;
 
@@ -213,6 +216,7 @@ export class GeminiLLMProvider implements LLMProvider {
     temperature?: number | undefined;
     maxTokens?: number | undefined;
     toolChoice?: any | undefined;
+    response_format?: any | undefined;
   }): AsyncGenerator<{
     text?: string | undefined;
     toolCalls?: Array<{ id?: string; name: string; args: Record<string, unknown> }> | undefined;

@@ -127,7 +127,7 @@ export default function MessageStream({ messages, executingTool, isGenerating = 
                 <TypingIndicator />
               ) : (
                 <div className="select-text text-zinc-400 italic">
-                  I have synchronized your schedule with the new gym timetable.
+                  I have updated and synchronized your weekly schedule.
                 </div>
               )}
 

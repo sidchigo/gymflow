@@ -32,6 +32,103 @@ function lowercaseSchemaTypes(schema: any): any {
   return result;
 }
 
+import { safeParseJSON } from "../json-utils";
+
+function parseDSMLToolCalls(text: string): {
+  cleanText: string;
+  toolCalls: Array<{ name: string; args: Record<string, unknown> }>;
+} {
+  const toolCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+
+  // Match standard DSML tool_calls block
+  const dsmlBlockRegex = /<[｜|]?(?:DSML[｜|]?)?tool_calls[｜|]?>([\s\S]*?)<\/[｜|]?(?:DSML[｜|]?)?tool_calls[｜|]?>/gi;
+  let match: RegExpExecArray | null;
+
+  while ((match = dsmlBlockRegex.exec(text)) !== null) {
+    const blockContent = match[1] || "";
+    const invokeRegex = /<[｜|]?(?:DSML[｜|]?)?invoke\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[｜|]?(?:DSML[｜|]?)?invoke[｜|]?>/gi;
+    let invokeMatch: RegExpExecArray | null;
+
+    while ((invokeMatch = invokeRegex.exec(blockContent)) !== null) {
+      const toolName = invokeMatch[1];
+      const invokeBody = invokeMatch[2] || "";
+      const args: Record<string, unknown> = {};
+
+      const paramRegex = /<[｜|]?(?:DSML[｜|]?)?parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)<\/[｜|]?(?:DSML[｜|]?)?parameter[｜|]?>/gi;
+      let paramMatch: RegExpExecArray | null;
+
+      while ((paramMatch = paramRegex.exec(invokeBody)) !== null) {
+        const paramName = paramMatch[1];
+        const paramValueRaw = (paramMatch[2] || "").trim();
+        if (paramName) {
+          try {
+            args[paramName] = safeParseJSON(paramValueRaw);
+          } catch {
+            args[paramName] = paramValueRaw;
+          }
+        }
+      }
+
+      if (toolName) {
+        toolCalls.push({ name: toolName, args });
+      }
+    }
+  }
+
+  // Handle unclosed/partial invoke tag if stream was truncated
+  if (toolCalls.length === 0) {
+    const unclosedInvokeRegex = /<[｜|]?(?:DSML[｜|]?)?invoke\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)(?:<\/[｜|]?(?:DSML[｜|]?)?invoke[｜|]?>|$)/gi;
+    let unclosedMatch: RegExpExecArray | null;
+    while ((unclosedMatch = unclosedInvokeRegex.exec(text)) !== null) {
+      const toolName = unclosedMatch[1];
+      const invokeBody = unclosedMatch[2] || "";
+      const args: Record<string, unknown> = {};
+
+      const paramRegex = /<[｜|]?(?:DSML[｜|]?)?parameter\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)(?:<\/[｜|]?(?:DSML[｜|]?)?parameter[｜|]?>|$)/gi;
+      let paramMatch: RegExpExecArray | null;
+
+      while ((paramMatch = paramRegex.exec(invokeBody)) !== null) {
+        const paramName = paramMatch[1];
+        const paramValueRaw = (paramMatch[2] || "").trim();
+        if (paramName) {
+          try {
+            args[paramName] = safeParseJSON(paramValueRaw);
+          } catch {
+            args[paramName] = paramValueRaw;
+          }
+        }
+      }
+
+      if (toolName && Object.keys(args).length > 0) {
+        toolCalls.push({ name: toolName, args });
+      }
+    }
+  }
+
+  // Single tool_call format fallback
+  const singleToolCallRegex = /<[｜|]?tool_call[｜|]?>([\s\S]*?)<\/[｜|]?tool_call[｜|]?>/gi;
+  while ((match = singleToolCallRegex.exec(text)) !== null) {
+    try {
+      const parsed = safeParseJSON((match[1] || "").trim());
+      if (parsed && typeof parsed === "object" && parsed.name) {
+        toolCalls.push({
+          name: parsed.name,
+          args: typeof parsed.arguments === "string" ? safeParseJSON(parsed.arguments) : (parsed.arguments || parsed.args || {}),
+        });
+      }
+    } catch {
+      // Ignore
+    }
+  }
+
+  const cleanText = text
+    .replace(/<[｜|]?(?:DSML[｜|]?)?tool_calls[｜|]?>[\s\S]*?(?:<\/[｜|]?(?:DSML[｜|]?)?tool_calls[｜|]?>|$)/gi, "")
+    .replace(/<[｜|]?tool_call[｜|]?>[\s\S]*?(?:<\/[｜|]?tool_call[｜|]?>|$)/gi, "")
+    .trim();
+
+  return { cleanText, toolCalls };
+}
+
 
 export class OpenAICompatibleProvider implements LLMProvider {
   private apiKey: string;
@@ -63,6 +160,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     temperature?: number | undefined;
     maxTokens?: number | undefined;
     toolChoice?: any | undefined;
+    response_format?: any | undefined;
   }): Promise<LLMResponse> {
     const modelName = params.model || this.defaultModel;
 
@@ -109,10 +207,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         openAIMessages.push({ role: "user", content: text });
       } else if (m.role === "model") {
         const text = parts.map((p) => p.text).filter(Boolean).join("\n");
-        const assistantMsg: any = { role: "assistant" };
-        if (text) {
-          assistantMsg.content = text;
-        }
+        const assistantMsg: any = { role: "assistant", content: text || null };
 
         const toolParts = parts.filter((p) => p.functionCall);
         if (toolParts.length > 0) {
@@ -154,6 +249,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
     if (mappedTools && mappedTools.length > 0) {
       body.tools = mappedTools;
       body.tool_choice = params.toolChoice !== undefined ? params.toolChoice : "auto";
+    }
+
+    const isDeepSeekOrOpenRouter = modelName.startsWith("deepseek/") || this.baseUrl.includes("openrouter.ai");
+    if (isDeepSeekOrOpenRouter) {
+      body.reasoning = { enabled: true };
+      if (params.response_format !== undefined) {
+        body.response_format = params.response_format;
+      }
     }
 
     const headers: Record<string, string> = {
@@ -204,11 +307,11 @@ export class OpenAICompatibleProvider implements LLMProvider {
       throw new Error("Invalid response structure from OpenAI Provider API: no choices returned");
     }
 
-    const resText = choice.message?.content || "";
-    const toolCalls = choice.message?.tool_calls?.map((tc: any) => {
+    let resText = choice.message?.content || "";
+    let toolCalls = choice.message?.tool_calls?.map((tc: any) => {
       let args = {};
       try {
-        args = JSON.parse(tc.function.arguments);
+        args = safeParseJSON(tc.function.arguments);
       } catch (e: any) {
         console.error(`Failed to parse tool call arguments: ${e.message}`);
       }
@@ -216,7 +319,15 @@ export class OpenAICompatibleProvider implements LLMProvider {
         name: tc.function.name,
         args,
       };
-    });
+    }) || [];
+
+    if (resText.includes("<｜DSML") || resText.includes("<|DSML") || resText.includes("<｜tool_calls") || resText.includes("<tool_call")) {
+      const dsml = parseDSMLToolCalls(resText);
+      resText = dsml.cleanText;
+      if (dsml.toolCalls.length > 0) {
+        toolCalls = [...toolCalls, ...dsml.toolCalls];
+      }
+    }
 
     const result: LLMResponse = {};
     if (resText) {
@@ -238,6 +349,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
     toolChoice?: any | undefined;
     onToken?: (token: string) => void;
     onStatus?: (message: string) => void;
+    response_format?: any | undefined;
   }): AsyncGenerator<{
     text?: string | undefined;
     toolCalls?: Array<{ id?: string; name: string; args: Record<string, unknown> }> | undefined;
@@ -285,10 +397,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         openAIMessages.push({ role: "user", content: text });
       } else if (m.role === "model") {
         const text = parts.map((p) => p.text).filter(Boolean).join("\n");
-        const assistantMsg: any = { role: "assistant" };
-        if (text) {
-          assistantMsg.content = text;
-        }
+        const assistantMsg: any = { role: "assistant", content: text || null };
 
         const toolParts = parts.filter((p) => p.functionCall);
         if (toolParts.length > 0) {
@@ -330,6 +439,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
     if (mappedTools && mappedTools.length > 0) {
       body.tools = mappedTools;
       body.tool_choice = params.toolChoice !== undefined ? params.toolChoice : "auto";
+    }
+
+    const isDeepSeekOrOpenRouter = modelName.startsWith("deepseek/") || this.baseUrl.includes("openrouter.ai");
+    if (isDeepSeekOrOpenRouter) {
+      body.reasoning = { enabled: true };
+      if (params.response_format !== undefined) {
+        body.response_format = params.response_format;
+      }
     }
 
     const headers: Record<string, string> = {
@@ -409,10 +526,25 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
             if (content) {
               streamedTextAccumulator += content;
-              if (params.onToken) {
-                params.onToken(content);
+
+              const dsmlIndex = streamedTextAccumulator.search(/<[｜|]?(?:DSML[｜|]?)?tool_calls|<[｜|]?invoke|<[｜|]?tool_call/i);
+              if (dsmlIndex === -1) {
+                if (params.onToken) {
+                  params.onToken(content);
+                }
+                yield { text: content };
+              } else {
+                const toolMatch = streamedTextAccumulator.match(/<[｜|]?(?:DSML[｜|]?)?invoke\s+name=["']([^"']+)["']/i);
+                if (toolMatch && toolMatch[1]) {
+                  const toolName = toolMatch[1];
+                  const statusMsg = toolName === 'replan_week_schedule' 
+                    ? 'Updating your 7-day training schedule...' 
+                    : `Checking ${toolName.replace(/_/g, ' ')}...`;
+                  if (params.onStatus) {
+                    params.onStatus(statusMsg);
+                  }
+                }
               }
-              yield { text: content };
             }
 
             const toolCalls = choice.delta?.tool_calls;
@@ -526,12 +658,12 @@ export class OpenAICompatibleProvider implements LLMProvider {
     console.log('[AGENT_FULL_OUTPUT_LENGTH]:', streamedTextAccumulator.length);
     console.log('[AGENT_FULL_OUTPUT_SAMPLE]:', streamedTextAccumulator.slice(0, 500));
 
-    const finalToolCalls = accumulatedToolCalls
+    let finalToolCalls = accumulatedToolCalls
       .filter((tc) => tc.name)
       .map((tc) => {
         let args = {};
         try {
-          args = JSON.parse(tc.arguments);
+          args = safeParseJSON(tc.arguments);
         } catch (e: any) {
           console.error(`Failed to parse streamed tool call arguments: ${e.message}`, tc.arguments);
         }
@@ -544,6 +676,13 @@ export class OpenAICompatibleProvider implements LLMProvider {
         }
         return tcObj;
       });
+
+    if (streamedTextAccumulator.includes("<｜DSML") || streamedTextAccumulator.includes("<|DSML") || streamedTextAccumulator.includes("<｜tool_calls") || streamedTextAccumulator.includes("<tool_call")) {
+      const dsml = parseDSMLToolCalls(streamedTextAccumulator);
+      if (dsml.toolCalls.length > 0) {
+        finalToolCalls = [...finalToolCalls, ...dsml.toolCalls];
+      }
+    }
 
     console.log('[AGENT_LLM] Parsed full JSON body/stream in:', Math.round(performance.now() - startTime), 'ms');
     console.log('[AGENT_LLM] Choices:', finalToolCalls.length > 0 ? 'Tool Call: ' + JSON.stringify(finalToolCalls.map((t) => t.name)) : 'Text Response');

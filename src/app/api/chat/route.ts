@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSessionFromRequest } from "@/lib/session";
 import { runCoachAgentStream } from "@/lib/agent-engine";
 import { type LLMMessage } from "@/lib/llm-provider";
+import { safeParseJSON } from "@/lib/json-utils";
 
 export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
@@ -59,12 +60,25 @@ export async function POST(request: NextRequest): Promise<Response> {
               if (event.type === "tool_start") {
                 let msg = "Analyzing request...";
                 if (event.name === "replan_week_schedule") {
-                  const plan = event.args?.plan as Array<{ modality: string }> | undefined;
-                  if (plan && plan.length > 0) {
+                  let plan = event.args?.plan;
+                  if (typeof plan === "string") {
+                    try {
+                      plan = safeParseJSON(plan);
+                    } catch {
+                      plan = undefined;
+                    }
+                  }
+                  if (Array.isArray(plan) && plan.length > 0) {
                     const modalities = Array.from(
-                      new Set(plan.map((p) => p.modality).filter((m) => m !== "REST" && m !== "MOBILITY_RECOVERY"))
+                      new Set(
+                        plan
+                          .map((p: any) => p?.modality)
+                          .filter((m: any) => typeof m === "string" && m !== "REST" && m !== "MOBILITY_RECOVERY")
+                      )
                     );
-                    msg = `Updating weekly schedule split (${modalities.join(", ")})...`;
+                    msg = modalities.length > 0
+                      ? `Updating weekly schedule split (${modalities.join(", ")})...`
+                      : "Syncing and updating weekly schedule split...";
                   } else {
                     msg = "Syncing and updating weekly schedule split...";
                   }

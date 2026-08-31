@@ -142,9 +142,9 @@ export type AthleteState = z.infer<typeof AthleteStateSchema>;
 
 export const PlannedExerciseSchema = z.object({
   name: z.string().min(1),
-  sets: z.number().int().positive(),
-  reps: z.string().min(1),
-  targetWeight: z.number().nonnegative().nullable().default(null),
+  sets: z.number().int().positive().optional().default(3),
+  reps: z.string().min(1).optional().default("10"),
+  targetWeight: z.number().nonnegative().nullable().optional().default(null),
   unit: z.preprocess((val) => {
     if (typeof val === 'string') {
       const upper = val.toUpperCase().trim();
@@ -153,13 +153,13 @@ export const PlannedExerciseSchema = z.object({
     }
     return 'KG';
   }, z.enum(['KG', 'LBS'])).default('KG'),
-  weightKg: z.number().nonnegative().nullable().default(null),
-  weightLbs: z.number().nonnegative().nullable().default(null),
-  targetRpe: z.number().min(1).max(10).nullable().default(null),
-  restSeconds: z.number().int().nonnegative().default(90),
-  supersetGroupId: z.string().nullable().default(null),
-  orderInGroup: z.number().int().positive().nullable().default(null),
-  progressionNote: z.string().nullable().default(null),
+  weightKg: z.number().nonnegative().nullable().optional().default(null),
+  weightLbs: z.number().nonnegative().nullable().optional().default(null),
+  targetRpe: z.number().min(1).max(10).nullable().optional().default(null),
+  restSeconds: z.number().int().nonnegative().optional().default(90),
+  supersetGroupId: z.string().nullable().optional().default(null),
+  orderInGroup: z.number().int().positive().nullable().optional().default(null),
+  progressionNote: z.string().nullable().optional().default(null),
 });
 export type PlannedExercise = z.infer<typeof PlannedExerciseSchema>;
 
@@ -168,18 +168,18 @@ export const DailyWorkoutPlanSchema = z.object({
   day: z.string().min(1),
   focus: z.string().min(1),
   modality: ModalitySchema,
-  isGymClass: z.boolean(),
-  gymSlotId: z.string().nullable().default(null),
-  plannedTime: z.string().regex(/^\d{2}:\d{2}$/), // HH:mm
-  estimatedDurationMinutes: z.number().nonnegative().nullable().default(null),
-  exercises: z.array(PlannedExerciseSchema),
-  nutritionAdvice: z.string(),
+  isGymClass: z.boolean().optional().default(false),
+  gymSlotId: z.string().nullable().optional().default(null),
+  plannedTime: z.string().regex(/^\d{2}:\d{2}$/).optional().default("18:00"),
+  estimatedDurationMinutes: z.number().nonnegative().nullable().optional().default(null),
+  exercises: z.array(PlannedExerciseSchema).optional().default([]),
+  nutritionAdvice: z.string().optional().default("Maintain standard balanced macro distribution."),
 });
 export type DailyWorkoutPlan = z.infer<typeof DailyWorkoutPlanSchema>;
 
 export const WeeklyWorkoutPlanSchema = z.object({
   plan: z.array(DailyWorkoutPlanSchema),
-  reasoning: z.string(),
+  reasoning: z.string().optional().default("Weekly workout plan updated based on schedule constraints."),
   updatedAt: z.string().min(1), // ISO 8601 IST
 });
 export type WeeklyWorkoutPlan = z.infer<typeof WeeklyWorkoutPlanSchema>;
@@ -190,18 +190,18 @@ export type WeeklyWorkoutPlan = z.infer<typeof WeeklyWorkoutPlanSchema>;
 
 export const ReplanWeekScheduleArgsSchema = z.object({
   plan: z.array(DailyWorkoutPlanSchema),
-  reasoning: z.string(),
+  reasoning: z.string().optional().default("Weekly workout plan updated based on schedule constraints."),
 });
 
 export const LogLiftPerformanceArgsSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   exerciseName: z.string().min(1),
-  unit: WeightUnitSchema,
+  unit: WeightUnitSchema.optional().default("KG"),
   sets: z.array(
     z.object({
-      setNumber: z.number().int().positive(),
-      weight: z.number().nonnegative(),
-      repsCompleted: z.number().int().nonnegative(),
+      setNumber: z.number().int().positive().optional().default(1),
+      weight: z.number().nonnegative().optional().default(0),
+      repsCompleted: z.number().int().nonnegative().optional().default(0),
       rpe: z.number().min(1).max(10).optional().nullable(),
     })
   ),
@@ -211,6 +211,6 @@ export const LogLiftPerformanceArgsSchema = z.object({
 export const LogAthleteEventArgsSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   type: AthleteEventTypeSchema,
-  severity: AthleteEventSeveritySchema,
-  notes: z.string(),
+  severity: AthleteEventSeveritySchema.optional().default("MODERATE"),
+  notes: z.string().optional().default(""),
 });

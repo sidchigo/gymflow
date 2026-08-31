@@ -371,10 +371,11 @@ describe("GymFlow Agent Scenarios Evaluation Suite", { concurrent: false }, () =
 
         // Assertion 5: contentChecks checking
         if (assertions.contentChecks && assertions.contentChecks.length > 0) {
+          const textToSearch = (agentResponse?.text || "").toLowerCase();
           for (const check of assertions.contentChecks) {
             if (check.mustContain) {
               for (const searchStr of check.mustContain) {
-                if (!agentResponse.text.toLowerCase().includes(searchStr.toLowerCase())) {
+                if (!textToSearch.includes(searchStr.toLowerCase())) {
                   scenarioResult.passed = false;
                   scenarioResult.errors.push(`Response text must contain "${searchStr}"`);
                 }
@@ -382,7 +383,7 @@ describe("GymFlow Agent Scenarios Evaluation Suite", { concurrent: false }, () =
             }
             if (check.mustNotContain) {
               for (const searchStr of check.mustNotContain) {
-                if (agentResponse.text.toLowerCase().includes(searchStr.toLowerCase())) {
+                if (textToSearch.includes(searchStr.toLowerCase())) {
                   scenarioResult.passed = false;
                   scenarioResult.errors.push(`Response text must NOT contain "${searchStr}"`);
                 }

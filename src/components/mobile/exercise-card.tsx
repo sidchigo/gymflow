@@ -20,13 +20,13 @@ export default function ExerciseCard({ exercise, preferredUnit }: ExerciseCardPr
 
   if (preferredUnit === "LBS") {
     if (exercise.weightLbs != null) {
-      displayWeight = exercise.weightLbs;
+      displayWeight = Math.round(exercise.weightLbs / 5) * 5;
     } else if (exercise.targetWeight != null) {
       const origUnit = exercise.unit || "KG";
       if (origUnit === "KG") {
         displayWeight = Math.round((exercise.targetWeight * 2.20462) / 5) * 5;
       } else {
-        displayWeight = exercise.targetWeight;
+        displayWeight = Math.round(exercise.targetWeight / 5) * 5;
       }
     }
   } else {

@@ -145,6 +145,7 @@ export type RawScheduleResponse = z.infer<typeof RawScheduleResponseSchema>;
 export const NormalizedGymSlotSchema = z.object({
   id: z.string().min(1),
   date: z.iso.date(),                            // "YYYY-MM-DD" IST – from scheduled_date
+  dayOfWeek: z.string().optional(),               // "Monday", "Tuesday", etc.
   startTime: z.string().regex(/^\d{2}:\d{2}$/), // "HH:MM" 24-hr IST
   endTime: z.string().regex(/^\d{2}:\d{2}$/),   // "HH:MM" 24-hr IST
   title: z.string().min(1),                      // from class_name
@@ -174,10 +175,10 @@ export const ScheduleDiffSchema = z.object({
 
 export type ScheduleDiff = z.infer<typeof ScheduleDiffSchema>;
 
-/**
- * The full document stored in Redis under `schedule:week:{year}_W{weekNumber}`.
- * Merges the canonical slot list with all detected diffs and fetch metadata.
- */
+// ---------------------------------------------------------------------------
+// Weekly Schedule Store Schema
+// ---------------------------------------------------------------------------
+
 export const WeeklyScheduleStoreSchema = z.object({
   lastFetchedAt: z.string().min(1), // ISO 8601 IST
   slots: z.array(NormalizedGymSlotSchema),
@@ -217,12 +218,17 @@ export function normalizeSchedulePayload(raw: unknown): NormalizedGymSlot[] {
     );
   }
 
-  return result.data.map((slot): NormalizedGymSlot => ({
-    id: slot.id,
-    date: slot.scheduled_date,
-    startTime: trimSeconds(slot.time_from),
-    endTime: trimSeconds(slot.time_to),
-    title: slot.class_name,
-    trainer: slot.coach_name,
-  }));
+  return result.data.map((slot): NormalizedGymSlot => {
+    const slotDateObj = new Date(`${slot.scheduled_date}T00:00:00+05:30`);
+    const dayOfWeek = slotDateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" });
+    return {
+      id: slot.id,
+      date: slot.scheduled_date,
+      dayOfWeek,
+      startTime: trimSeconds(slot.time_from),
+      endTime: trimSeconds(slot.time_to),
+      title: slot.class_name,
+      trainer: slot.coach_name,
+    };
+  });
 }

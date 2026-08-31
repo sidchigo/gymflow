@@ -33,14 +33,7 @@ import {
   type WeeklyWorkoutPlan,
 } from "@/types/agent";
 
-function safeParseJSON(str: string): any {
-  if (typeof str !== "string") return str;
-  let cleaned = str
-    .replace(/[\u201c\u201d\u201e\u201f]/g, '"')
-    .replace(/[\u2018\u2019\u201a\u201b]/g, "'")
-    .replace(/"\s*:\s*/g, '":');
-  return JSON.parse(cleaned);
-}
+import { safeParseJSON } from "@/lib/json-utils";
 
 // ---------------------------------------------------------------------------
 // 1. Tool Declarations
@@ -255,6 +248,7 @@ export function buildSystemPrompt(params: {
   gymScheduleDiffs: string; // pre-formatted compact string
   currentPlan: string; // pre-formatted current plan
   currentDateIST: string;
+  weeklyCalendarAnchor?: string;
 }): string {
   const profile = params.athleteState.profile;
 
@@ -282,7 +276,10 @@ PERIODIZATION & SAFETY RULES:
 
 CURRENT DATE/TIME IST: ${params.currentDateIST}
 
-ATHLETE PROFILE:
+${params.weeklyCalendarAnchor ? `TARGET WEEK CALENDAR ANCHOR (Strict Reference):
+${params.weeklyCalendarAnchor}
+
+` : ""}ATHLETE PROFILE:
 - Weight: ${profile.weightKg ?? 70} kg. Preference: ${(profile as any).weightUnitPreference ?? (profile as any).unitPreference ?? "KG"}
 - Height: ${profile.heightCm ?? 170} cm. Target Days/Week: ${profile.targetDaysPerWeek ?? 5}
 - Mandatory Combat: Kickboxing: ${profile.mandatoryCombatSessions?.kickboxing ?? 0}/wk, BJJ: ${profile.mandatoryCombatSessions?.bjj ?? 0}/wk
@@ -315,6 +312,28 @@ Output Style: Write user-facing explanations in clear, polished, and professiona
 // ---------------------------------------------------------------------------
 // 3. Execution & Orchestration Loop
 // ---------------------------------------------------------------------------
+
+function buildWeeklyCalendarAnchor(currentDateIST: string): string {
+  // currentDateIST is "YYYY-MM-DDTHH:mm" in IST offset
+  const todayDateStr = currentDateIST.split("T")[0] || "2026-09-01";
+  const [y, m, d] = todayDateStr.split("-").map(Number) as [number, number, number];
+  const todayObj = new Date(Date.UTC(y, m - 1, d));
+  const dayNum = todayObj.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  const mondayOffset = dayNum === 0 ? -6 : 1 - dayNum;
+
+  const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const anchorLines: string[] = [];
+
+  for (let i = 0; i < 7; i++) {
+    const targetDate = new Date(Date.UTC(y, m - 1, d + mondayOffset + i));
+    const isoDate = targetDate.toISOString().split("T")[0];
+    const dayName = daysOfWeek[i];
+    const isToday = isoDate === todayDateStr;
+    anchorLines.push(`  * ${dayName}: ${isoDate}${isToday ? " [TODAY]" : ""}`);
+  }
+
+  return anchorLines.join("\n");
+}
 
 export interface AgentResult {
   text: string;
@@ -365,8 +384,8 @@ export async function runCoachAgent(params: {
     if (slotDateTime < currentDateIST) return false;
     const startHour = s.startTime;
     const pref = athleteState.profile.trainingTimePreference || "BOTH";
-    const slotDateObj = new Date(s.date);
-    const dayName = slotDateObj.toLocaleDateString("en-US", { weekday: "long" });
+    const slotDateObj = new Date(`${s.date}T00:00:00+05:30`);
+    const dayName = s.dayOfWeek || slotDateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" });
     const isWeekend = dayName === "Saturday" || dayName === "Sunday";
     if (isWeekend) {
       if (pref === "EVENING") return startHour >= "12:00";
@@ -386,7 +405,10 @@ export async function runCoachAgent(params: {
   const slotsText =
     filteredSlots.length > 0
       ? filteredSlots
-          .map((s) => `  * Slot [${s.id}] - ${s.date} (${s.startTime}-${s.endTime}): ${s.title} by ${s.trainer}`)
+          .map((s) => {
+            const dayOfWeek = s.dayOfWeek || new Date(`${s.date}T00:00:00+05:30`).toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" });
+            return `  * Slot [${s.id}] - ${dayOfWeek} ${s.date} (${s.startTime}-${s.endTime}): ${s.title} by ${s.trainer}`;
+          })
           .join("\n")
       : "  (No scheduled classes found)";
 
@@ -413,12 +435,15 @@ export async function runCoachAgent(params: {
         .join("\n")
     : "  (No active weekly plan found)";
 
+  const weeklyCalendarAnchor = buildWeeklyCalendarAnchor(currentDateIST);
+
   const systemPrompt = buildSystemPrompt({
     athleteState,
     gymScheduleSlots: slotsText,
     gymScheduleDiffs: diffsText,
     currentPlan: currentPlanText,
     currentDateIST,
+    weeklyCalendarAnchor,
   });
 
   messages[0] = { role: "system", parts: [{ text: systemPrompt }] };
@@ -612,8 +637,8 @@ export async function runCoachAgentStream(params: {
     if (slotDateTime < currentDateIST) return false;
     const startHour = s.startTime;
     const pref = athleteState.profile.trainingTimePreference || "BOTH";
-    const slotDateObj = new Date(s.date);
-    const dayName = slotDateObj.toLocaleDateString("en-US", { weekday: "long" });
+    const slotDateObj = new Date(`${s.date}T00:00:00+05:30`);
+    const dayName = s.dayOfWeek || slotDateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" });
     const isWeekend = dayName === "Saturday" || dayName === "Sunday";
     if (isWeekend) {
       if (pref === "EVENING") return startHour >= "12:00";
@@ -633,7 +658,10 @@ export async function runCoachAgentStream(params: {
   const slotsText =
     filteredSlots.length > 0
       ? filteredSlots
-          .map((s) => `  * Slot [${s.id}] - ${s.date} (${s.startTime}-${s.endTime}): ${s.title} by ${s.trainer}`)
+          .map((s) => {
+            const dayOfWeek = s.dayOfWeek || new Date(`${s.date}T00:00:00+05:30`).toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" });
+            return `  * Slot [${s.id}] - ${dayOfWeek} ${s.date} (${s.startTime}-${s.endTime}): ${s.title} by ${s.trainer}`;
+          })
           .join("\n")
       : "  (No scheduled classes found)";
 
@@ -660,12 +688,15 @@ export async function runCoachAgentStream(params: {
         .join("\n")
     : "  (No active weekly plan found)";
 
+  const weeklyCalendarAnchor = buildWeeklyCalendarAnchor(currentDateIST);
+
   const systemPrompt = buildSystemPrompt({
     athleteState,
     gymScheduleSlots: slotsText,
     gymScheduleDiffs: diffsText,
     currentPlan: currentPlanText,
     currentDateIST,
+    weeklyCalendarAnchor,
   });
 
   messages[0] = { role: "system", parts: [{ text: systemPrompt }] };
@@ -732,7 +763,20 @@ export async function runCoachAgentStream(params: {
         );
       }
 
-      onEvent({ type: "tool_start", name: call.name, args: call.args });
+      let toolArgs = call.args;
+      if (call.name === "replan_week_schedule" && typeof toolArgs?.plan === "string") {
+        try {
+          toolArgs = {
+            ...toolArgs,
+            plan: safeParseJSON(toolArgs.plan),
+          };
+          call.args = toolArgs;
+        } catch (e) {
+          console.error("Failed to pre-parse stringified plan in runCoachAgentStream:", e);
+        }
+      }
+
+      onEvent({ type: "tool_start", name: call.name, args: toolArgs });
 
       let executionResult: string;
       let toolTimeoutId: any;
