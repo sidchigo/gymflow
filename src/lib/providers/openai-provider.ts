@@ -1,96 +1,16 @@
+/**
+ * @file src/lib/providers/openai-provider.ts
+ * @spec SPEC-004 – AI Coach Engine & Adaptive Planning Workflow
+ *
+ * OpenAI Compatible provider implementation for LLM completions.
+ */
+
 import {
   type LLMMessage,
   type LLMToolDefinition,
   type LLMResponse,
   type LLMProvider,
 } from "../llm-provider";
-
-export class OpenAICompatibleProvider implements LLMProvider {
-  private apiKey: string;
-  private baseUrl: string;
-  private defaultModel: string;
-
-  constructor(options?: { apiKey?: string; baseUrl?: string; defaultModel?: string }) {
-    this.apiKey =
-      options?.apiKey ||
-      process.env.LLM_API_KEY ||
-      process.env.OPENCODE_API_KEY ||
-      "";
-    this.baseUrl =
-      options?.baseUrl ||
-      process.env.LLM_BASE_URL ||
-      process.env.OPENCODE_BASE_URL ||
-      "https://opencode.ai/zen/v1";
-    this.defaultModel =
-      options?.defaultModel ||
-      process.env.LLM_MODEL ||
-      "opencode-zen-1";
-  }
-
-  async generateCompletion(params: {
-    messages: LLMMessage[];
-    tools?: LLMToolDefinition[];
-    model?: string;
-  }): Promise<LLMResponse> {
-    const modelName = params.model || this.defaultModel;
-
-    // Map Gemini LLMMessage[] format to OpenAI Chat Completions Messages
-    const callIdMap = new Map<string, string>();
-    const openAIMessages: any[] = [];
-
-    for (let i = 0; i < params.messages.length; i++) {
-      const m = params.messages[i];
-      if (!m) continue;
-
-      // Extract function responses first (since host engine might append them under "user" role)
-      const funcParts = m.parts.filter((p) => p.functionResponse);
-      if (funcParts.length > 0) {
-        for (const p of funcParts) {
-          if (p.functionResponse) {
-            const fr = p.functionResponse;
-            const callId = callIdMap.get(fr.name) || `call_fallback_${fr.name}`;
-            openAIMessages.push({
-              role: "tool",
-              tool_call_id: callId,
-              content: JSON.stringify(fr.response),
-            });
-          }
-        }
-        continue;
-      }
-
-      if (m.role === "system") {
-        const text = m.parts.map((p) => p.text).filter(Boolean).join("\n");
-        openAIMessages.push({ role: "system", content: text });
-      } else if (m.role === "user") {
-        const text = m.parts.map((p) => p.text).filter(Boolean).join("\n");
-        openAIMessages.push({ role: "user", content: text });
-      } else if (m.role === "model") {
-        const text = m.parts.map((p) => p.text).filter(Boolean).join("\n");
-        const assistantMsg: any = { role: "assistant" };
-        if (text) {
-          assistantMsg.content = text;
-        }
-
-        const toolParts = m.parts.filter((p) => p.functionCall);
-        if (toolParts.length > 0) {
-          assistantMsg.tool_calls = toolParts.map((p, idx) => {
-            const fc = p.functionCall!;
-            const callId = `call_${i}_${idx}`;
-            callIdMap.set(fc.name, callId);
-            return {
-              id: callId,
-              type: "function",
-              function: {
-                name: fc.name,
-                arguments: JSON.stringify(fc.args),
-              },
-            };
-          });
-        }
-        openAIMessages.push(assistantMsg);
-      }
-    }
 
 function lowercaseSchemaTypes(schema: any): any {
   if (typeof schema !== "object" || schema === null) {
@@ -110,6 +30,108 @@ function lowercaseSchemaTypes(schema: any): any {
   return result;
 }
 
+
+export class OpenAICompatibleProvider implements LLMProvider {
+  private apiKey: string;
+  private baseUrl: string;
+  private defaultModel: string;
+
+  constructor(options?: { apiKey?: string; baseUrl?: string; defaultModel?: string }) {
+    this.apiKey =
+      options?.apiKey ||
+      process.env.LLM_API_KEY ||
+      process.env.OPENCODE_API_KEY ||
+      "";
+    this.baseUrl =
+      options?.baseUrl ||
+      process.env.LLM_BASE_URL ||
+      process.env.OPENCODE_BASE_URL ||
+      "https://opencode.ai/zen/v1";
+    this.defaultModel =
+      options?.defaultModel ||
+      process.env.OPENROUTER_MODEL ||
+      process.env.LLM_MODEL ||
+      "google/gemini-2.5-flash-lite";
+  }
+
+  async generateCompletion(params: {
+    messages: LLMMessage[];
+    tools?: LLMToolDefinition[] | undefined;
+    model?: string | undefined;
+    temperature?: number | undefined;
+    maxTokens?: number | undefined;
+    toolChoice?: any | undefined;
+  }): Promise<LLMResponse> {
+    const modelName = params.model || this.defaultModel;
+
+    // Map Gemini LLMMessage[] format to OpenAI Chat Completions Messages
+    const callIdMap = new Map<string, string>();
+    const openAIMessages: any[] = [];
+
+    for (let i = 0; i < params.messages.length; i++) {
+      const m = params.messages[i];
+      if (!m) continue;
+
+      if (m.role === "tool") {
+        openAIMessages.push({
+          role: "tool",
+          tool_call_id: m.tool_call_id,
+          content: m.content || "",
+        });
+        continue;
+      }
+
+      const parts = m.parts || [];
+      // Extract function responses first (since host engine might append them under "user" role)
+      const funcParts = parts.filter((p) => p.functionResponse);
+      if (funcParts.length > 0) {
+        for (const p of funcParts) {
+          if (p.functionResponse) {
+            const fr = p.functionResponse;
+            const callId = callIdMap.get(fr.name) || `call_fallback_${fr.name}`;
+            openAIMessages.push({
+              role: "tool",
+              tool_call_id: callId,
+              content: JSON.stringify(fr.response),
+            });
+          }
+        }
+        continue;
+      }
+
+      if (m.role === "system") {
+        const text = parts.map((p) => p.text).filter(Boolean).join("\n");
+        openAIMessages.push({ role: "system", content: text });
+      } else if (m.role === "user") {
+        const text = parts.map((p) => p.text).filter(Boolean).join("\n");
+        openAIMessages.push({ role: "user", content: text });
+      } else if (m.role === "model") {
+        const text = parts.map((p) => p.text).filter(Boolean).join("\n");
+        const assistantMsg: any = { role: "assistant" };
+        if (text) {
+          assistantMsg.content = text;
+        }
+
+        const toolParts = parts.filter((p) => p.functionCall);
+        if (toolParts.length > 0) {
+          assistantMsg.tool_calls = toolParts.map((p, idx) => {
+            const fc = p.functionCall!;
+            const callId = `call_${i}_${idx}`;
+            callIdMap.set(fc.name, callId);
+            return {
+              id: callId,
+              type: "function",
+              function: {
+                name: fc.name,
+                arguments: JSON.stringify(fc.args),
+              },
+            };
+          });
+        }
+        openAIMessages.push(assistantMsg);
+      }
+    }
+
     // Map LLMToolDefinition[] format to OpenAI Tools
     const mappedTools = params.tools?.map((t) => ({
       type: "function" as const,
@@ -123,33 +145,58 @@ function lowercaseSchemaTypes(schema: any): any {
     const body: any = {
       model: modelName,
       messages: openAIMessages,
+      temperature: params.temperature !== undefined ? params.temperature : 0.2,
+      max_tokens: params.maxTokens !== undefined ? params.maxTokens : 3000,
     };
 
     if (mappedTools && mappedTools.length > 0) {
       body.tools = mappedTools;
-      body.tool_choice = "auto";
+      body.tool_choice = params.toolChoice !== undefined ? params.toolChoice : "auto";
     }
 
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
 
-    if (this.apiKey) {
-      headers["Authorization"] = `Bearer ${this.apiKey}`;
+    const authKey = process.env.LLM_API_KEY || process.env.OPENROUTER_API_KEY || this.apiKey;
+    if (authKey) {
+      headers["Authorization"] = `Bearer ${authKey}`;
     }
 
-    const response = await fetch(`${this.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-    });
+    console.log('[AGENT_INPUT_MESSAGES]:', openAIMessages.map((m: any) => ({ role: m.role, length: typeof m.content === 'string' ? m.content.length : 'complex' })));
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`OpenAI Provider API returned status ${response.status}: ${errorText}`);
+    let response: Response;
+    let data: any;
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(new Error("LLM completion read timeout")), 120000);
+    try {
+      console.log('[AGENT_LLM] Sending request to OpenRouter model:', modelName);
+      const startTime = performance.now();
+      response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      console.log('[AGENT_LLM] Received headers in:', Math.round(performance.now() - startTime), 'ms, status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenAI Provider API returned status ${response.status}: ${errorText}`);
+      }
+
+      data = await response.json();
+      console.log('[AGENT_LLM] Parsed full JSON body in:', Math.round(performance.now() - startTime), 'ms');
+    } catch (err: any) {
+      console.error(`[LLM_CALL] Request failed: ${err.message || err}`);
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
 
-    const data = await response.json();
+    console.log('[AGENT_LLM] Choices:', data.choices?.[0]?.message?.tool_calls ? 'Tool Call: ' + JSON.stringify(data.choices[0].message.tool_calls.map((t: any) => t.function.name)) : 'Text Response');
+
     const choice = data.choices?.[0];
     if (!choice) {
       throw new Error("Invalid response structure from OpenAI Provider API: no choices returned");
@@ -182,13 +229,331 @@ function lowercaseSchemaTypes(schema: any): any {
 
   async *generateCompletionStream(params: {
     messages: LLMMessage[];
-    tools?: LLMToolDefinition[];
-    model?: string;
+    tools?: LLMToolDefinition[] | undefined;
+    model?: string | undefined;
+    temperature?: number | undefined;
+    maxTokens?: number | undefined;
+    toolChoice?: any | undefined;
+    onToken?: (token: string) => void;
+    onStatus?: (message: string) => void;
   }): AsyncGenerator<{
     text?: string | undefined;
-    toolCalls?: Array<{ name: string; args: Record<string, unknown> }> | undefined;
+    toolCalls?: Array<{ id?: string; name: string; args: Record<string, unknown> }> | undefined;
   }> {
-    const result = await this.generateCompletion(params);
-    yield result;
+    const modelName = params.model || this.defaultModel;
+
+    const callIdMap = new Map<string, string>();
+    const openAIMessages: any[] = [];
+
+    for (let i = 0; i < params.messages.length; i++) {
+      const m = params.messages[i];
+      if (!m) continue;
+
+      if (m.role === "tool") {
+        openAIMessages.push({
+          role: "tool",
+          tool_call_id: m.tool_call_id,
+          content: m.content || "",
+        });
+        continue;
+      }
+
+      const parts = m.parts || [];
+      const funcParts = parts.filter((p) => p.functionResponse);
+      if (funcParts.length > 0) {
+        for (const p of funcParts) {
+          if (p.functionResponse) {
+            const fr = p.functionResponse;
+            const callId = callIdMap.get(fr.name) || `call_fallback_${fr.name}`;
+            openAIMessages.push({
+              role: "tool",
+              tool_call_id: callId,
+              content: JSON.stringify(fr.response),
+            });
+          }
+        }
+        continue;
+      }
+
+      if (m.role === "system") {
+        const text = parts.map((p) => p.text).filter(Boolean).join("\n");
+        openAIMessages.push({ role: "system", content: text });
+      } else if (m.role === "user") {
+        const text = parts.map((p) => p.text).filter(Boolean).join("\n");
+        openAIMessages.push({ role: "user", content: text });
+      } else if (m.role === "model") {
+        const text = parts.map((p) => p.text).filter(Boolean).join("\n");
+        const assistantMsg: any = { role: "assistant" };
+        if (text) {
+          assistantMsg.content = text;
+        }
+
+        const toolParts = parts.filter((p) => p.functionCall);
+        if (toolParts.length > 0) {
+          assistantMsg.tool_calls = toolParts.map((p, idx) => {
+            const fc = p.functionCall!;
+            const callId = `call_${i}_${idx}`;
+            callIdMap.set(fc.name, callId);
+            return {
+              id: callId,
+              type: "function",
+              function: {
+                name: fc.name,
+                arguments: JSON.stringify(fc.args),
+              },
+            };
+          });
+        }
+        openAIMessages.push(assistantMsg);
+      }
+    }
+
+    const mappedTools = params.tools?.map((t) => ({
+      type: "function" as const,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: lowercaseSchemaTypes(t.parameters),
+      },
+    }));
+
+    const body: any = {
+      model: modelName,
+      messages: openAIMessages,
+      stream: true,
+      max_tokens: params.maxTokens !== undefined ? params.maxTokens : 3000,
+      temperature: params.temperature !== undefined ? params.temperature : 0.2,
+    };
+
+    if (mappedTools && mappedTools.length > 0) {
+      body.tools = mappedTools;
+      body.tool_choice = params.toolChoice !== undefined ? params.toolChoice : "auto";
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+
+    const authKey = process.env.LLM_API_KEY || process.env.OPENROUTER_API_KEY || this.apiKey;
+    if (authKey) {
+      headers["Authorization"] = `Bearer ${authKey}`;
+    }
+
+    console.log('[AGENT_INPUT_MESSAGES]:', openAIMessages.map((m: any) => ({ role: m.role, length: typeof m.content === 'string' ? m.content.length : 'complex' })));
+
+    console.log('[AGENT_LLM] Sending streaming request to OpenRouter model:', modelName);
+    const startTime = performance.now();
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(new Error("LLM completion stream read timeout")), 120000);
+
+    let response: Response;
+    let streamedTextAccumulator = "";
+    try {
+      response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      console.log('[AGENT_LLM] Received headers in:', Math.round(performance.now() - startTime), 'ms, status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`OpenAI Provider API returned status ${response.status}: ${errorText}`);
+      }
+    } catch (err: any) {
+      clearTimeout(timeoutId);
+      throw err;
+    }
+
+    if (!response.body) {
+      clearTimeout(timeoutId);
+      throw new Error("No response body stream");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    const accumulatedToolCalls: Array<{
+      id?: string;
+      name?: string;
+      arguments: string;
+    }> = [];
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === "data: [DONE]") continue;
+          if (!trimmed.startsWith("data: ")) continue;
+
+          const dataStr = trimmed.slice(6).trim();
+          try {
+            const chunk = JSON.parse(dataStr);
+            const choice = chunk.choices?.[0];
+            if (!choice) continue;
+
+            const delta = choice.delta;
+            const content = delta?.content || "";
+
+            if (content) {
+              streamedTextAccumulator += content;
+              if (streamedTextAccumulator.length <= 300) {
+                console.log('[AGENT_RAW_CHUNK_SAMPLE]:', content);
+              }
+
+              if (params.onToken) {
+                params.onToken(content);
+              }
+              yield { text: content };
+            }
+
+            const toolCalls = choice.delta?.tool_calls;
+            if (toolCalls && toolCalls.length > 0) {
+              console.log('[AGENT_RAW_TOOL_DELTA]:', JSON.stringify(toolCalls));
+              for (const tc of toolCalls) {
+                const idx = tc.index;
+                if (!accumulatedToolCalls[idx]) {
+                  accumulatedToolCalls[idx] = { arguments: "" };
+                  if (tc.function?.name) {
+                    accumulatedToolCalls[idx].name = tc.function.name;
+                    const toolName = tc.function.name;
+                    const statusMsg = toolName === 'replan_week_schedule' 
+                      ? 'Updating your 7-day training schedule...' 
+                      : `Checking ${toolName.replace(/_/g, ' ')}...`;
+                    if (params.onStatus) {
+                      params.onStatus(statusMsg);
+                    }
+                  }
+                }
+                if (tc.id) {
+                  accumulatedToolCalls[idx].id = tc.id;
+                }
+                if (tc.function?.name && !accumulatedToolCalls[idx].name) {
+                  accumulatedToolCalls[idx].name = tc.function.name;
+                  const toolName = tc.function.name;
+                  const statusMsg = toolName === 'replan_week_schedule' 
+                    ? 'Updating your 7-day training schedule...' 
+                    : `Checking ${toolName.replace(/_/g, ' ')}...`;
+                  if (params.onStatus) {
+                    params.onStatus(statusMsg);
+                  }
+                }
+                if (tc.function?.arguments) {
+                  accumulatedToolCalls[idx].arguments += tc.function.arguments;
+                }
+              }
+            }
+          } catch (e: any) {
+            // Ignore parsing errors for partial or keep-alive lines
+          }
+        }
+      }
+
+      if (buffer.trim()) {
+        const line = buffer.trim();
+        if (line.startsWith("data: ") && line !== "data: [DONE]") {
+          const dataStr = line.slice(6).trim();
+          try {
+            const chunk = JSON.parse(dataStr);
+            const choice = chunk.choices?.[0];
+            if (choice) {
+              const content = choice.delta?.content || "";
+
+              if (content) {
+                streamedTextAccumulator += content;
+                if (streamedTextAccumulator.length <= 300) {
+                  console.log('[AGENT_RAW_CHUNK_SAMPLE]:', content);
+                }
+
+                if (params.onToken) {
+                  params.onToken(content);
+                }
+                yield { text: content };
+              }
+              const toolCalls = choice.delta?.tool_calls;
+              if (toolCalls && toolCalls.length > 0) {
+                console.log('[AGENT_RAW_TOOL_DELTA]:', JSON.stringify(toolCalls));
+                for (const tc of toolCalls) {
+                  const idx = tc.index;
+                  if (!accumulatedToolCalls[idx]) {
+                    accumulatedToolCalls[idx] = { arguments: "" };
+                    if (tc.function?.name) {
+                      accumulatedToolCalls[idx].name = tc.function.name;
+                      const toolName = tc.function.name;
+                      const statusMsg = toolName === 'replan_week_schedule' 
+                        ? 'Updating your 7-day training schedule...' 
+                        : `Checking ${toolName.replace(/_/g, ' ')}...`;
+                      if (params.onStatus) {
+                        params.onStatus(statusMsg);
+                      }
+                    }
+                  }
+                  if (tc.id) {
+                    accumulatedToolCalls[idx].id = tc.id;
+                  }
+                  if (tc.function?.name && !accumulatedToolCalls[idx].name) {
+                    accumulatedToolCalls[idx].name = tc.function.name;
+                    const toolName = tc.function.name;
+                    const statusMsg = toolName === 'replan_week_schedule' 
+                      ? 'Updating your 7-day training schedule...' 
+                      : `Checking ${toolName.replace(/_/g, ' ')}...`;
+                    if (params.onStatus) {
+                      params.onStatus(statusMsg);
+                    }
+                  }
+                  if (tc.function?.arguments) {
+                    accumulatedToolCalls[idx].arguments += tc.function.arguments;
+                  }
+                }
+              }
+            }
+          } catch (e: any) {
+            // Ignore
+          }
+        }
+      }
+    } finally {
+      clearTimeout(timeoutId);
+      reader.releaseLock();
+    }
+
+    console.log('[AGENT_FULL_OUTPUT_LENGTH]:', streamedTextAccumulator.length);
+    console.log('[AGENT_FULL_OUTPUT_SAMPLE]:', streamedTextAccumulator.slice(0, 500));
+
+    const finalToolCalls = accumulatedToolCalls
+      .filter((tc) => tc.name)
+      .map((tc) => {
+        let args = {};
+        try {
+          args = JSON.parse(tc.arguments);
+        } catch (e: any) {
+          console.error(`Failed to parse streamed tool call arguments: ${e.message}`, tc.arguments);
+        }
+        const tcObj: { id?: string; name: string; args: Record<string, unknown> } = {
+          name: tc.name!,
+          args,
+        };
+        if (tc.id !== undefined) {
+          tcObj.id = tc.id;
+        }
+        return tcObj;
+      });
+
+    console.log('[AGENT_LLM] Parsed full JSON body/stream in:', Math.round(performance.now() - startTime), 'ms');
+    console.log('[AGENT_LLM] Choices:', finalToolCalls.length > 0 ? 'Tool Call: ' + JSON.stringify(finalToolCalls.map((t) => t.name)) : 'Text Response');
+
+    if (finalToolCalls.length > 0) {
+      yield { toolCalls: finalToolCalls };
+    }
   }
 }

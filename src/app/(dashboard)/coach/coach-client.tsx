@@ -72,7 +72,7 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
     }));
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 190000);
+    const timeoutId = setTimeout(() => controller.abort(), 180000);
 
     // Initialize/Reset refs for the current message
     targetTextRef.current = "";
@@ -124,7 +124,7 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
           try {
             const event = JSON.parse(dataStr);
             if (event.error) {
-              throw new Error(event.error);
+              throw new Error(`AGENT_ERROR: ${event.error}`);
             }
             if (event.type === "token" && event.content) {
               targetTextRef.current += event.content;
@@ -132,7 +132,7 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
               setExecutingTool(event.message || null);
             }
           } catch (e) {
-            if (e instanceof Error && e.message.includes("timed out")) {
+            if (e instanceof Error && (e.message.includes("timed out") || e.message.startsWith("AGENT_ERROR:"))) {
               throw e;
             }
             console.error("Failed to parse SSE token stream:", e);
@@ -140,26 +140,35 @@ export default function CoachClient({ initialPrompt }: CoachClientProps) {
         }
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Unknown error";
+      const rawMessage = err instanceof Error ? err.message : "Unknown error";
       console.error("Stream reader failed:", err);
       
+      const isAgentError = rawMessage.startsWith("AGENT_ERROR:");
+      const message = isAgentError ? rawMessage.replace("AGENT_ERROR:", "").trim() : rawMessage;
+
       const isTimeoutOrAbort = 
-        message.includes("timed out") || 
-        message.includes("Timeout") ||
-        message.includes("504") ||
-        message.includes("500") ||
-        (err instanceof DOMException && err.name === "AbortError") ||
-        (err instanceof Error && err.name === "AbortError") ||
-        message.toLowerCase().includes("abort");
+        !isAgentError && (
+          message.includes("timed out") || 
+          message.includes("Timeout") ||
+          message.includes("504") ||
+          message.includes("500") ||
+          (err instanceof DOMException && err.name === "AbortError") ||
+          (err instanceof Error && err.name === "AbortError") ||
+          message.toLowerCase().includes("abort")
+        );
 
       const displayMessage = isTimeoutOrAbort
-        ? "Coach response timed out. Please tap 'Sync Gym Schedule' or try again."
-        : `[Coach communication interrupted: ${message}]`;
+        ? "The model took too long to process this schedule adjustment. Please try rephrasing or submitting again."
+        : isAgentError
+          ? message
+          : `[Coach communication interrupted: ${message}]`;
 
       targetTextRef.current += (targetTextRef.current ? "\n\n" : "") + displayMessage;
     } finally {
       clearTimeout(timeoutId);
       isStreamActiveRef.current = false;
+      setIsGenerating(false);
+      setExecutingTool(null);
     }
   };
 

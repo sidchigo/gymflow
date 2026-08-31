@@ -27,8 +27,10 @@ export interface LLMMessagePart {
 }
 
 export interface LLMMessage {
-  role: "user" | "model" | "system" | "function";
-  parts: LLMMessagePart[];
+  role: "user" | "model" | "system" | "function" | "tool";
+  parts?: LLMMessagePart[];
+  tool_call_id?: string;
+  content?: string;
 }
 
 export interface LLMToolDefinition {
@@ -44,6 +46,7 @@ export interface LLMToolDefinition {
 export interface LLMResponse {
   text?: string;
   toolCalls?: Array<{
+    id?: string;
     name: string;
     args: Record<string, unknown>;
   }>;
@@ -52,18 +55,25 @@ export interface LLMResponse {
 export interface LLMProvider {
   generateCompletion(params: {
     messages: LLMMessage[];
-    tools?: LLMToolDefinition[];
-    model?: string;
+    tools?: LLMToolDefinition[] | undefined;
+    model?: string | undefined;
+    temperature?: number | undefined;
+    maxTokens?: number | undefined;
+    toolChoice?: any | undefined;
   }): Promise<LLMResponse>;
   generateCompletionStream?(params: {
     messages: LLMMessage[];
-    tools?: LLMToolDefinition[];
-    model?: string;
+    tools?: LLMToolDefinition[] | undefined;
+    model?: string | undefined;
+    temperature?: number | undefined;
+    maxTokens?: number | undefined;
+    toolChoice?: any | undefined;
   }): AsyncGenerator<{
     text?: string | undefined;
-    toolCalls?: Array<{ name: string; args: Record<string, unknown> }> | undefined;
+    toolCalls?: Array<{ id?: string; name: string; args: Record<string, unknown> }> | undefined;
   }>;
 }
+
 
 // ---------------------------------------------------------------------------
 // 2. Gemini Implementation
@@ -90,17 +100,22 @@ export class GeminiLLMProvider implements LLMProvider {
 
   async generateCompletion(params: {
     messages: LLMMessage[];
-    tools?: LLMToolDefinition[];
-    model?: string;
+    tools?: LLMToolDefinition[] | undefined;
+    model?: string | undefined;
+    temperature?: number | undefined;
+    maxTokens?: number | undefined;
+    toolChoice?: any | undefined;
   }): Promise<LLMResponse> {
     const modelName = params.model || this.defaultModel;
 
     // 1. Extract system instruction
     const systemMessage = params.messages.find((m) => m.role === "system");
     const systemInstruction = systemMessage?.parts
-      .map((p) => p.text)
-      .filter(Boolean)
-      .join("\n");
+      ? systemMessage.parts
+          .map((p) => p.text)
+          .filter(Boolean)
+          .join("\n")
+      : undefined;
 
     // 2. Filter system message from contents and map other roles
     const contents = params.messages
@@ -113,7 +128,7 @@ export class GeminiLLMProvider implements LLMProvider {
           role = "model";
         }
 
-        const parts = m.parts.map((p) => {
+        const parts = (m.parts || []).map((p) => {
           if (p.functionCall) {
             return {
               functionCall: {
@@ -157,6 +172,12 @@ export class GeminiLLMProvider implements LLMProvider {
     if (configTools) {
       configObj.tools = configTools;
     }
+    if (params.temperature !== undefined) {
+      configObj.temperature = params.temperature;
+    }
+    if (params.maxTokens !== undefined) {
+      configObj.maxOutputTokens = params.maxTokens;
+    }
 
     const response = await this.ai.models.generateContent({
       model: modelName,
@@ -187,19 +208,24 @@ export class GeminiLLMProvider implements LLMProvider {
 
   async *generateCompletionStream(params: {
     messages: LLMMessage[];
-    tools?: LLMToolDefinition[];
-    model?: string;
+    tools?: LLMToolDefinition[] | undefined;
+    model?: string | undefined;
+    temperature?: number | undefined;
+    maxTokens?: number | undefined;
+    toolChoice?: any | undefined;
   }): AsyncGenerator<{
     text?: string | undefined;
-    toolCalls?: Array<{ name: string; args: Record<string, unknown> }> | undefined;
+    toolCalls?: Array<{ id?: string; name: string; args: Record<string, unknown> }> | undefined;
   }> {
     const modelName = params.model || this.defaultModel;
 
     const systemMessage = params.messages.find((m) => m.role === "system");
     const systemInstruction = systemMessage?.parts
-      .map((p) => p.text)
-      .filter(Boolean)
-      .join("\n");
+      ? systemMessage.parts
+          .map((p) => p.text)
+          .filter(Boolean)
+          .join("\n")
+      : undefined;
 
     const contents = params.messages
       .filter((m) => m.role !== "system")
@@ -209,7 +235,7 @@ export class GeminiLLMProvider implements LLMProvider {
           role = "model";
         }
 
-        const parts = m.parts.map((p) => {
+        const parts = (m.parts || []).map((p) => {
           if (p.functionCall) {
             return {
               functionCall: {
@@ -250,6 +276,12 @@ export class GeminiLLMProvider implements LLMProvider {
     }
     if (configTools) {
       configObj.tools = configTools;
+    }
+    if (params.temperature !== undefined) {
+      configObj.temperature = params.temperature;
+    }
+    if (params.maxTokens !== undefined) {
+      configObj.maxOutputTokens = params.maxTokens;
     }
 
     const responseStream = await this.ai.models.generateContentStream({

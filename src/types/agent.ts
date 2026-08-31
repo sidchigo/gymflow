@@ -145,7 +145,14 @@ export const PlannedExerciseSchema = z.object({
   sets: z.number().int().positive(),
   reps: z.string().min(1),
   targetWeight: z.number().nonnegative().nullable().default(null),
-  unit: WeightUnitSchema.default("KG"),
+  unit: z.preprocess((val) => {
+    if (typeof val === 'string') {
+      const upper = val.toUpperCase().trim();
+      if (upper === 'KG' || upper === 'KGS') return 'KG';
+      if (upper === 'LBS' || upper === 'LB') return 'LBS';
+    }
+    return 'KG';
+  }, z.enum(['KG', 'LBS'])).default('KG'),
   weightKg: z.number().nonnegative().nullable().default(null),
   weightLbs: z.number().nonnegative().nullable().default(null),
   targetRpe: z.number().min(1).max(10).nullable().default(null),

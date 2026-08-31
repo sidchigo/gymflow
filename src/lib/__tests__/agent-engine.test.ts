@@ -1,4 +1,4 @@
-import { vi, describe, it, expect, beforeEach } from "vitest";
+import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
 import { runCoachAgent } from "@/lib/agent-engine";
 import {
   getAthleteState,
@@ -48,6 +48,7 @@ vi.mock("@/lib/redis", () => {
         diffs: [],
       };
     }),
+    saveWeeklyStore: vi.fn(async (_key: string, _store: any) => {}),
     scheduleWeekKey: vi.fn((isoWeekId: string) => `schedule:week:${isoWeekId}`),
   };
 });
@@ -89,10 +90,16 @@ describe("Coach Agent Engine", () => {
   };
 
   beforeEach(async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-28T12:00:00Z"));
     vi.clearAllMocks();
     mockProvider = new MockLLMProvider();
     // Reset/seed mock Redis DB
     await saveAthleteState(userId, initialAthleteState);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("handles a direct conversational query without calling tools", async () => {

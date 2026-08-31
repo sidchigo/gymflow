@@ -32,22 +32,31 @@ export async function POST(request: NextRequest): Promise<Response> {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      // Send 2KB padding of comment lines to bypass Vercel/Next.js/browser chunk buffering
+      const padding = ":" + " ".repeat(2048) + "\n\n";
+      controller.enqueue(encoder.encode(padding));
+
       let timeoutId: any;
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutId = setTimeout(() => reject(new Error("Timeout")), 180000);
       });
 
+      let tokenCount = 0;
       try {
-        await Promise.race([
+        const result = await Promise.race([
           runCoachAgentStream({
             userId,
             userMessage: message,
             chatHistory: history,
+            controller,
+            onToken: (token) => {
+              tokenCount++;
+              controller.enqueue(
+                encoder.encode(`data: ${JSON.stringify({ type: "token", content: token })}\n\n`)
+              );
+            },
             onEvent: (event) => {
-              if (event.type === "text" && event.text) {
-                const data = `data: ${JSON.stringify({ type: "token", content: event.text })}\n\n`;
-                controller.enqueue(encoder.encode(data));
-              } else if (event.type === "tool_start") {
+              if (event.type === "tool_start") {
                 let msg = "Analyzing request...";
                 if (event.name === "replan_week_schedule") {
                   const plan = event.args?.plan as Array<{ modality: string }> | undefined;
@@ -76,7 +85,17 @@ export async function POST(request: NextRequest): Promise<Response> {
             },
           }),
           timeoutPromise,
-        ]);
+        ]) as any;
+
+        // Safety fallback: if no tokens were streamed but result text exists
+        if (result?.text && tokenCount === 0) {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: "token", content: result.text })}\n\n`)
+          );
+          tokenCount = 1;
+        }
+
+        console.log('[SSE_EMIT] Total tokens streamed:', tokenCount);
         controller.enqueue(encoder.encode("data: [DONE]\n\n"));
       } catch (err: any) {
         console.error(`[api/chat] error in agent stream for userId=${userId}:`, err);
