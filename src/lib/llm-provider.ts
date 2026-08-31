@@ -37,7 +37,7 @@ export interface LLMToolDefinition {
   name: string;
   description: string;
   parameters: {
-    type: "OBJECT";
+    type: "object" | "OBJECT";
     properties: Record<string, unknown>;
     required?: string[];
   };

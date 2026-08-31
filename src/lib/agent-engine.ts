@@ -51,23 +51,23 @@ export const replanWeekScheduleTool: LLMToolDefinition = {
   description:
     "Generates or modifies the weekly 7-day athletic workout and recovery plan with progressive overload targets, supersets, and nutrition advice based on available gym classes and athlete profile constraints.",
   parameters: {
-    type: "OBJECT",
+    type: "object",
     properties: {
       plan: {
-        type: "ARRAY",
+        type: "array",
         description: "The 7-day plan from Monday through Sunday.",
         items: {
-          type: "OBJECT",
+          type: "object",
           properties: {
-            date: { type: "STRING", description: "YYYY-MM-DD format (IST)" },
-            day: { type: "STRING", description: "Monday, Tuesday, etc." },
+            date: { type: "string", description: "YYYY-MM-DD format (IST)" },
+            day: { type: "string", description: "Monday, Tuesday, etc." },
             focus: {
-              type: "STRING",
+              type: "string",
               description:
                 'Primary session objective (e.g., "BJJ + Grip Conditioning", "Upper Hypertrophy (Supersets)")',
             },
             modality: {
-              type: "STRING",
+              type: "string",
               enum: [
                 "KICKBOXING",
                 "BJJ",
@@ -83,71 +83,71 @@ export const replanWeekScheduleTool: LLMToolDefinition = {
               ],
             },
             isGymClass: {
-              type: "BOOLEAN",
+              type: "boolean",
               description: "True if mapped to a scheduled gym class",
             },
             gymSlotId: {
-              type: "STRING",
+              type: "string",
               description: "Slot ID from gym schedule if isGymClass is true",
               nullable: true,
             },
-            plannedTime: { type: "STRING", description: "HH:mm (24-hr IST)" },
-            estimatedDurationMinutes: { type: "NUMBER", nullable: true },
+            plannedTime: { type: "string", description: "HH:mm (24-hr IST)" },
+            estimatedDurationMinutes: { type: "number", nullable: true },
             exercises: {
-              type: "ARRAY",
+              type: "array",
               description:
                 "Prescribed exercises with progressive overload targets and optional superset groupings.",
               items: {
-                type: "OBJECT",
+                type: "object",
                 properties: {
                   name: {
-                    type: "STRING",
+                    type: "string",
                     description: 'e.g. "Barbell Bench Press", "Dumbbell Row"',
                   },
-                  sets: { type: "NUMBER", description: "Number of working sets" },
+                  sets: { type: "number", description: "Number of working sets" },
                   reps: {
-                    type: "STRING",
+                    type: "string",
                     description: 'Target rep scheme (e.g. "5", "8-10", "AMRAP")',
                   },
                   targetWeight: {
-                    type: "NUMBER",
+                    type: "number",
                     description: "Legacy target weight (optional)",
                     nullable: true,
                   },
-                  unit: { type: "STRING", enum: ["KG", "LBS"], nullable: true },
+                  unit: { type: "string", enum: ["KG", "LBS"], nullable: true },
                   weightKg: {
-                    type: "NUMBER",
+                    type: "number",
                     description: "Prescribed weight in kilograms (e.g. 20, 22.5, 45, or null if bodyweight)",
                     nullable: true,
                   },
                   weightLbs: {
-                    type: "NUMBER",
+                    type: "number",
                     description: "Prescribed weight in pounds. MUST be rounded to standard 5 lbs increments (e.g. 45, 50, 90, or null if bodyweight). Do not output decimals for LBS (e.g. use 45 instead of 44.1).",
                     nullable: true,
                   },
                   targetRpe: {
-                    type: "NUMBER",
+                    type: "number",
                     description: "Target RPE (1-10 scale)",
                     nullable: true,
                   },
                   restSeconds: {
-                    type: "NUMBER",
+                    type: "number",
                     description: "Rest period in seconds after this set/exercise",
                   },
                   supersetGroupId: {
-                    type: "STRING",
+                    type: "string",
                     description:
                       'Short identifier like "A" or "B" for exercises done back-to-back. Null if standalone.',
                     nullable: true,
                   },
                   orderInGroup: {
-                    type: "NUMBER",
+                    type: "number",
                     description:
                       "Order within the superset (e.g. 1 for A1, 2 for A2)",
                     nullable: true,
                   },
                   progressionNote: {
-                    type: "STRING",
+                    type: "string",
                     description:
                       'Progression directive (e.g. "+5 lbs over last week"). ALWAYS specify progress targets in both KG and LBS (e.g. "+1 kg / +2.5 lbs")',
                     nullable: true,
@@ -157,7 +157,7 @@ export const replanWeekScheduleTool: LLMToolDefinition = {
               },
             },
             nutritionAdvice: {
-              type: "STRING",
+              type: "string",
               description:
                 "Specific pre/post workout fuel recommendation based on session demand.",
             },
@@ -175,7 +175,7 @@ export const replanWeekScheduleTool: LLMToolDefinition = {
         },
       },
       reasoning: {
-        type: "STRING",
+        type: "string",
         description:
           "Clear coaching explanation of why this split was selected given the work schedule, fatigue, and gym timetable.",
       },
@@ -189,29 +189,29 @@ export const logLiftPerformanceTool: LLMToolDefinition = {
   description:
     "Logs completed weight lifting sets, reps, load, and unit to maintain progressive overload records.",
   parameters: {
-    type: "OBJECT",
+    type: "object",
     properties: {
-      date: { type: "STRING", description: "YYYY-MM-DD (IST)" },
+      date: { type: "string", description: "YYYY-MM-DD (IST)" },
       exerciseName: {
-        type: "STRING",
+        type: "string",
         description: "Exercise name matching standard movement library",
       },
-      unit: { type: "STRING", enum: ["KG", "LBS"] },
+      unit: { type: "string", enum: ["KG", "LBS"] },
       sets: {
-        type: "ARRAY",
+        type: "array",
         items: {
-          type: "OBJECT",
+          type: "object",
           properties: {
-            setNumber: { type: "NUMBER" },
-            weight: { type: "NUMBER" },
-            repsCompleted: { type: "NUMBER" },
-            rpe: { type: "NUMBER", nullable: true },
+            setNumber: { type: "number" },
+            weight: { type: "number" },
+            repsCompleted: { type: "number" },
+            rpe: { type: "number", nullable: true },
           },
           required: ["setNumber", "weight", "repsCompleted"],
         },
       },
       notes: {
-        type: "STRING",
+        type: "string",
         description: "Observations on form, velocity, or joint fatigue.",
         nullable: true,
       },
@@ -225,15 +225,15 @@ export const logAthleteEventTool: LLMToolDefinition = {
   description:
     "Logs an unexpected health or schedule constraint such as illness, acute soreness/overload, travel, or missed workout.",
   parameters: {
-    type: "OBJECT",
+    type: "object",
     properties: {
-      date: { type: "STRING", description: "YYYY-MM-DD IST" },
+      date: { type: "string", description: "YYYY-MM-DD IST" },
       type: {
-        type: "STRING",
+        type: "string",
         enum: ["ILLNESS", "MISSED_SESSION", "SORENESS_OVERLOAD", "TRAVEL_WORK"],
       },
-      severity: { type: "STRING", enum: ["MILD", "MODERATE", "SEVERE"] },
-      notes: { type: "STRING", description: "Details reported by user." },
+      severity: { type: "string", enum: ["MILD", "MODERATE", "SEVERE"] },
+      notes: { type: "string", description: "Details reported by user." },
     },
     required: ["date", "type", "severity", "notes"],
   },

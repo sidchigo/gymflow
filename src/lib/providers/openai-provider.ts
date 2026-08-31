@@ -12,6 +12,8 @@ import {
   type LLMProvider,
 } from "../llm-provider";
 
+
+
 function lowercaseSchemaTypes(schema: any): any {
   if (typeof schema !== "object" || schema === null) {
     return schema;
@@ -407,10 +409,6 @@ export class OpenAICompatibleProvider implements LLMProvider {
 
             if (content) {
               streamedTextAccumulator += content;
-              if (streamedTextAccumulator.length <= 300) {
-                console.log('[AGENT_RAW_CHUNK_SAMPLE]:', content);
-              }
-
               if (params.onToken) {
                 params.onToken(content);
               }
@@ -468,18 +466,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
             const choice = chunk.choices?.[0];
             if (choice) {
               const content = choice.delta?.content || "";
-
               if (content) {
                 streamedTextAccumulator += content;
-                if (streamedTextAccumulator.length <= 300) {
-                  console.log('[AGENT_RAW_CHUNK_SAMPLE]:', content);
-                }
-
                 if (params.onToken) {
                   params.onToken(content);
                 }
                 yield { text: content };
               }
+
               const toolCalls = choice.delta?.tool_calls;
               if (toolCalls && toolCalls.length > 0) {
                 console.log('[AGENT_RAW_TOOL_DELTA]:', JSON.stringify(toolCalls));
@@ -526,6 +520,8 @@ export class OpenAICompatibleProvider implements LLMProvider {
       clearTimeout(timeoutId);
       reader.releaseLock();
     }
+
+
 
     console.log('[AGENT_FULL_OUTPUT_LENGTH]:', streamedTextAccumulator.length);
     console.log('[AGENT_FULL_OUTPUT_SAMPLE]:', streamedTextAccumulator.slice(0, 500));
