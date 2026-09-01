@@ -1,7 +1,31 @@
 # GymFlow 🥊
-> Adaptive, agentic strength & MMA conditioning copilot synchronized with live gym scheduling.
 
-GymFlow is an open-source AI coaching copilot designed for combat sports athletes and strength training. Unlike static workout trackers, GymFlow bridges real-time third-party gym class schedules with a stateful LLM orchestrator. It adapts your weekly periodization on the fly based on real-life friction: mid-week gym class cancellations, daily work-from-home/office commute shifts, systemic fatigue, and unexpected illness.
+I built GymFlow because my gym's class schedule kept changing mid-week and I was tired of manually rearranging my training around it. It syncs live with my gym's scheduling API, detects class cancellations, and uses an LLM agent to replan my week around real-world constraints — Work From Office (WFO) commute shifts, systemic fatigue, nutrition, and combat sports sessions (Kickboxing, BJJ). I use it every day.
+
+The repo is open source. You won't be able to connect it to my gym's API (it's behind private membership auth), but you can run it fully locally with mock fixtures using `GYM_USE_MOCK=true` — all AI replanning, schedule diffing, and coaching workflows work identically.
+
+---
+
+## 📱 Screenshots
+
+### 📅 Adaptive Weekly Schedule & Live Sync
+| Kickboxing Skills (WFO 60M) | Boxing Conditioning (WFO) |
+| :---: | :---: |
+| <img src="./screenshots/GymFlow_1.jpg" width="400" alt="Tuesday Kickboxing Skills" /> | <img src="./screenshots/GymFlow_2.jpg" width="400" alt="Wednesday Boxing Conditioning" /> |
+
+| BJJ Development (WFH) | Live Timetable Update Notification |
+| :---: | :---: |
+| <img src="./screenshots/GymFlow_3.jpg" width="400" alt="Thursday BJJ Development" /> | <img src="./screenshots/GymFlow_8.jpg" width="400" alt="Live Sync & Schedule Diff Notification" /> |
+
+### 🤖 AI Coach Assistant & Dynamic Replanning
+| Interactive Coach Chat | Contextual Advice & Fueling Strategy |
+| :---: | :---: |
+| <img src="./screenshots/GymFlow_6.jpg" width="400" alt="AI Coach Assistant Interface" /> | <img src="./screenshots/GymFlow_7.jpg" width="400" alt="AI Coach Workout Strategy" /> |
+
+### ⚙️ User Constraints & Modality Settings
+| Biometrics & Nutrition Settings | Modalities & Training Windows |
+| :---: | :---: |
+| <img src="./screenshots/GymFlow_4.jpg" width="400" alt="General Metrics & Nutrition" /> | <img src="./screenshots/GymFlow_5.jpg" width="400" alt="Active Modalities & Work Hours" /> |
 
 ---
 
