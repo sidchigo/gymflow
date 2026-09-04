@@ -77,7 +77,7 @@ export const replanWeekScheduleTool: LLMToolDefinition = {
             },
             isGymClass: {
               type: "boolean",
-              description: "True if mapped to a scheduled gym class",
+              description: "True if mapped to a scheduled gym class. For class sessions (isGymClass: true), exercises array MUST strictly contain only Warmup and Cooldown recommendations without superset exercise pairs.",
             },
             gymSlotId: {
               type: "string",
@@ -89,7 +89,7 @@ export const replanWeekScheduleTool: LLMToolDefinition = {
             exercises: {
               type: "array",
               description:
-                "Prescribed exercises with progressive overload targets and optional superset groupings.",
+                "Prescribed exercises with progressive overload targets. For scheduled gym classes (isGymClass: true), strictly list ONLY Warmup and Cooldown/Mobility routines with supersetGroupId set to null.",
               items: {
                 type: "object",
                 properties: {
@@ -265,6 +265,9 @@ GROUND RULES:
 5. Saturday can only be morning sessions, only if weekday missed. Sunday is strictly REST.
 6. Replace cancelled combat sessions (BJJ/KB) with KB/Boxing/DUT/TRX conditioning or S&C to maintain the 5-day training goal.
 7. Focus on a brief coaching explanation in the response. Do not render calendar grids or markdown tables.
+8. MODALITY ENUM ENFORCEMENT: The only allowable modalities for activities are: ${(profile.modalities ?? []).join(", ")}. Never use MUAY_THAI, MMA, or any unconfigured modality. Combat sessions MUST strictly be labeled KICKBOXING or BJJ.
+9. PAST DAYS ARE LOCKED: Current date is ${params.currentDateIST.split("T")[0] || ""}. Any schedule days prior to today have already been completed. When calling \`replan_week_schedule\`, copy the exact existing activities from ACTIVE WEEK PLAN for past days without modifying their dates, times, or exercises. Only optimize and adjust days from today onwards.
+10. SCHEDULED GYM CLASSES: When a session is a scheduled gym class (\`isGymClass: true\`), DO NOT pair exercises or assign superset groups (\`supersetGroupId\` must be null). Do NOT prescribe heavy strength/resistance lifting exercises for class sessions. The \`exercises\` array MUST strictly contain ONLY Warmup and Cooldown/Mobility recommendations (e.g. 'Dynamic Warmup', 'Post-Class Static Stretch/Cooldown').
 
 PERIODIZATION & SAFETY RULES:
 1. Lock 2 combat slots (Kickboxing, BJJ) first from verified timetable slots.
@@ -488,8 +491,28 @@ export async function runCoachAgent(params: {
             }
           }
           const parsedArgs = ReplanWeekScheduleArgsSchema.parse(args);
+          const today = currentDateIST.split("T")[0] || "";
+          const existingWeekPlan = currentPlanDoc?.plan || [];
+          const sanitizedPlan = parsedArgs.plan.map((dayPlan) => {
+            let finalDay = dayPlan;
+            if (dayPlan.date < today) {
+              const existingDay = existingWeekPlan.find((p) => p.date === dayPlan.date);
+              finalDay = existingDay || dayPlan;
+            }
+            if (finalDay.isGymClass) {
+              finalDay = {
+                ...finalDay,
+                exercises: (finalDay.exercises || []).map((ex) => ({
+                  ...ex,
+                  supersetGroupId: null,
+                  orderInGroup: null,
+                })),
+              };
+            }
+            return finalDay;
+          });
           const fullPlan: WeeklyWorkoutPlan = {
-            plan: parsedArgs.plan,
+            plan: sanitizedPlan,
             reasoning: parsedArgs.reasoning,
             updatedAt: nowIST(),
           };
@@ -795,8 +818,28 @@ export async function runCoachAgentStream(params: {
               }
             }
             const parsedArgs = ReplanWeekScheduleArgsSchema.parse(args);
+            const today = currentDateIST.split("T")[0] || "";
+            const existingWeekPlan = currentPlanDoc?.plan || [];
+            const sanitizedPlan = parsedArgs.plan.map((dayPlan) => {
+              let finalDay = dayPlan;
+              if (dayPlan.date < today) {
+                const existingDay = existingWeekPlan.find((p) => p.date === dayPlan.date);
+                finalDay = existingDay || dayPlan;
+              }
+              if (finalDay.isGymClass) {
+                finalDay = {
+                  ...finalDay,
+                  exercises: (finalDay.exercises || []).map((ex) => ({
+                    ...ex,
+                    supersetGroupId: null,
+                    orderInGroup: null,
+                  })),
+                };
+              }
+              return finalDay;
+            });
             const fullPlan: WeeklyWorkoutPlan = {
-              plan: parsedArgs.plan,
+              plan: sanitizedPlan,
               reasoning: parsedArgs.reasoning,
               updatedAt: nowIST(),
             };

@@ -16,30 +16,33 @@ export default function ExerciseCard({ exercise, preferredUnit }: ExerciseCardPr
 
   // Runtime weight selection and legacy fallback
   let displayWeight: number | null | undefined = null;
-  let displayUnit = preferredUnit || "KG";
+  const rawUnit = String(preferredUnit || exercise.unit || "KG").toUpperCase();
+  const displayUnit = rawUnit === "LBS" || rawUnit === "LB" ? "LBS" : "KG";
 
-  if (preferredUnit === "LBS") {
+  if (displayUnit === "LBS") {
     if (exercise.weightLbs != null) {
       displayWeight = Math.round(exercise.weightLbs / 5) * 5;
+    } else if (exercise.weightKg != null) {
+      displayWeight = Math.round((exercise.weightKg * 2.20462) / 5) * 5;
     } else if (exercise.targetWeight != null) {
-      const origUnit = exercise.unit || "KG";
-      if (origUnit === "KG") {
-        displayWeight = Math.round((exercise.targetWeight * 2.20462) / 5) * 5;
-      } else {
-        displayWeight = Math.round(exercise.targetWeight / 5) * 5;
-      }
+      const origUnit = String(exercise.unit || "KG").toUpperCase();
+      displayWeight =
+        origUnit === "KG" || origUnit === "KGS"
+          ? Math.round((exercise.targetWeight * 2.20462) / 5) * 5
+          : Math.round(exercise.targetWeight / 5) * 5;
     }
   } else {
     // Default to KG
     if (exercise.weightKg != null) {
       displayWeight = exercise.weightKg;
+    } else if (exercise.weightLbs != null) {
+      displayWeight = Math.round(exercise.weightLbs * 0.453592 * 2) / 2;
     } else if (exercise.targetWeight != null) {
-      const origUnit = exercise.unit || "KG";
-      if (origUnit === "LBS") {
-        displayWeight = Math.round(exercise.targetWeight * 0.453592);
-      } else {
-        displayWeight = exercise.targetWeight;
-      }
+      const origUnit = String(exercise.unit || "KG").toUpperCase();
+      displayWeight =
+        origUnit === "LBS" || origUnit === "LB"
+          ? Math.round(exercise.targetWeight * 0.453592 * 2) / 2
+          : exercise.targetWeight;
     }
   }
 

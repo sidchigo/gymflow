@@ -276,4 +276,148 @@ describe("Coach Agent Engine", () => {
     expect(state!.events[0]?.type).toBe("ILLNESS");
     expect(state!.events[0]?.severity).toBe("MODERATE");
   });
+
+  it("includes modality enum enforcement and past days locked instructions in system prompt", async () => {
+    mockProvider.generateCompletion.mockResolvedValue({ text: "OK" });
+
+    await runCoachAgent({
+      userId,
+      userMessage: "Hello coach",
+      provider: mockProvider,
+    });
+
+    const systemMessage = mockProvider.generateCompletion.mock.calls[0]?.[0]?.messages?.[0]?.parts?.[0]?.text;
+    expect(systemMessage).toContain("MODALITY ENUM ENFORCEMENT:");
+    expect(systemMessage).toContain("Never use MUAY_THAI, MMA, or any unconfigured modality");
+    expect(systemMessage).toContain("PAST DAYS ARE LOCKED:");
+  });
+
+  it("preserves past days from existing week plan when replan_week_schedule is called with modified past dates", async () => {
+    // Seed an existing plan with past day 2026-08-25
+    await (await import("@/lib/redis")).saveWeeklyWorkoutPlan(userId, "2026_W35", {
+      plan: [
+        {
+          date: "2026-08-25",
+          day: "Tuesday",
+          focus: "Original Past Workout",
+          modality: "LOWER_STRENGTH",
+          isGymClass: false,
+          gymSlotId: null,
+          plannedTime: "07:00",
+          estimatedDurationMinutes: 60,
+          exercises: [],
+          nutritionAdvice: "Original Fuel",
+        },
+      ],
+      reasoning: "Initial plan",
+      updatedAt: "2026-08-25T10:00:00+05:30",
+    });
+
+    // Mock LLM call attempting to overwrite past day 2026-08-25
+    mockProvider.generateCompletion.mockResolvedValueOnce({
+      toolCalls: [
+        {
+          name: "replan_week_schedule",
+          args: {
+            plan: [
+              {
+                date: "2026-08-25",
+                day: "Tuesday",
+                focus: "Accidental Overwrite Muay Thai",
+                modality: "KICKBOXING",
+                isGymClass: false,
+                plannedTime: "18:00",
+                exercises: [],
+                nutritionAdvice: "Modified Fuel",
+              },
+              {
+                date: "2026-08-29",
+                day: "Saturday",
+                focus: "Future Workout",
+                modality: "UPPER_HYPERTROPHY",
+                isGymClass: false,
+                plannedTime: "10:00",
+                exercises: [],
+                nutritionAdvice: "Protein Shake",
+              },
+            ],
+            reasoning: "Updating week schedule",
+          },
+        },
+      ],
+    });
+
+    mockProvider.generateCompletion.mockResolvedValueOnce({
+      text: "Plan updated.",
+    });
+
+    await runCoachAgent({
+      userId,
+      userMessage: "Replan my week",
+      provider: mockProvider,
+    });
+
+    const savedPlan = await getWeeklyWorkoutPlan(userId, "2026_W35");
+    expect(savedPlan).not.toBeNull();
+    // Past day 2026-08-25 must be preserved from existing plan
+    const pastDay = savedPlan!.plan.find((p: any) => p.date === "2026-08-25");
+    expect(pastDay?.focus).toBe("Original Past Workout");
+    expect(pastDay?.modality).toBe("LOWER_STRENGTH");
+    // Future day 2026-08-29 should be updated
+    const futureDay = savedPlan!.plan.find((p: any) => p.date === "2026-08-29");
+    expect(futureDay?.focus).toBe("Future Workout");
+  });
+
+  it("strips superset groups for scheduled gym class sessions", async () => {
+    mockProvider.generateCompletion.mockResolvedValueOnce({
+      toolCalls: [
+        {
+          name: "replan_week_schedule",
+          args: {
+            plan: [
+              {
+                date: "2026-08-29",
+                day: "Saturday",
+                focus: "Kickboxing Class",
+                modality: "KICKBOXING",
+                isGymClass: true,
+                gymSlotId: "slot-2",
+                plannedTime: "18:00",
+                estimatedDurationMinutes: 60,
+                exercises: [
+                  {
+                    name: "Dynamic Warmup",
+                    sets: 1,
+                    reps: "5 min",
+                    restSeconds: 30,
+                    supersetGroupId: "A",
+                    orderInGroup: 1,
+                  },
+                ],
+                nutritionAdvice: "Hydrate",
+              },
+            ],
+            reasoning: "Class session",
+          },
+        },
+      ],
+    });
+
+    mockProvider.generateCompletion.mockResolvedValueOnce({
+      text: "Scheduled class.",
+    });
+
+    await runCoachAgent({
+      userId,
+      userMessage: "Schedule kickboxing class",
+      provider: mockProvider,
+    });
+
+    const savedPlan = await getWeeklyWorkoutPlan(userId, "2026_W35");
+    const classDay = savedPlan!.plan.find((p: any) => p.date === "2026-08-29");
+    expect(classDay?.isGymClass).toBe(true);
+    expect(classDay?.exercises[0]?.supersetGroupId).toBeNull();
+    expect(classDay?.exercises[0]?.orderInGroup).toBeNull();
+  });
 });
+
