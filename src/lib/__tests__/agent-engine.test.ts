@@ -84,6 +84,8 @@ describe("Coach Agent Engine", () => {
       workDayStartTime: "09:00",
       workDayEndTime: "18:00",
       trainingTimePreference: "BOTH",
+      hardStopTrainingTime: "20:00",
+      hardStopWindow: "EVENING",
     },
     lifts: [],
     events: [],
@@ -418,6 +420,68 @@ describe("Coach Agent Engine", () => {
     expect(classDay?.isGymClass).toBe(true);
     expect(classDay?.exercises[0]?.supersetGroupId).toBeNull();
     expect(classDay?.exercises[0]?.orderInGroup).toBeNull();
+  });
+
+  it("filters out gym slots exceeding hard stop training cutoff considering WFO return commute", async () => {
+    const { filterGymSlots } = await import("@/lib/agent-engine");
+    const testState: AthleteState = {
+      ...initialAthleteState,
+      profile: {
+        ...initialAthleteState.profile,
+        hardStopTrainingTime: "20:00",
+        hardStopWindow: "EVENING",
+        weeklyWorkSchedule: {
+          ...initialAthleteState.profile.weeklyWorkSchedule,
+          Tuesday: { mode: "WFO", commuteMinutesOneWay: 45 },
+        },
+      },
+    };
+
+    const slots = [
+      {
+        id: "slot-valid-wfo",
+        date: "2026-09-01",
+        startTime: "18:00",
+        endTime: "19:00", // 19:00 + 45m commute = 19:45 <= 20:00 -> VALID
+        title: "Kickboxing",
+        trainer: "Coach Steve",
+      },
+      {
+        id: "slot-invalid-wfo",
+        date: "2026-09-01",
+        startTime: "19:00",
+        endTime: "20:00", // 20:00 + 45m commute = 20:45 > 20:00 -> EXCEEDS HARD STOP
+        title: "Late BJJ",
+        trainer: "Coach Marcus",
+      },
+    ];
+
+    const filtered = filterGymSlots(slots, testState, "2026-08-28T12:00:00+05:30");
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.id).toBe("slot-valid-wfo");
+  });
+
+  it("intercepts raw JSON block output in text response as a tool call fallback", async () => {
+    // Mock LLM returning raw JSON in text response without native tool call
+    mockProvider.generateCompletion.mockResolvedValueOnce({
+      text: "```json\n{\n  \"plan\": [\n    {\n      \"date\": \"2026-08-29\",\n      \"day\": \"Saturday\",\n      \"focus\": \"Fallback Bag Work\",\n      \"modality\": \"BOXING_CONDITIONING\",\n      \"isGymClass\": false,\n      \"plannedTime\": \"10:00\",\n      \"exercises\": [],\n      \"nutritionAdvice\": \"Hydrate well\"\n    }\n  ],\n  \"reasoning\": \"Fallback raw JSON parsing test\"\n}\n```",
+    });
+
+    const result = await runCoachAgent({
+      userId,
+      userMessage: "Update my schedule for Saturday",
+      provider: mockProvider,
+    });
+
+    expect(result.toolCallsExecuted).toHaveLength(1);
+    expect(result.toolCallsExecuted[0]?.name).toBe("replan_week_schedule");
+    expect(result.text).not.toContain("```json");
+    expect(result.text).toBe("Fallback raw JSON parsing test");
+
+    const plan = await getWeeklyWorkoutPlan(userId, "2026_W35");
+    expect(plan).not.toBeNull();
+    const saturdayPlan = plan!.plan.find((p) => p.date === "2026-08-29");
+    expect(saturdayPlan?.focus).toBe("Fallback Bag Work");
   });
 });
 

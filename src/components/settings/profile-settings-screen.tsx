@@ -62,6 +62,12 @@ const TRAINING_TIME_OPTIONS: readonly { value: TrainingTimePreference; label: st
   { value: "BOTH", label: "Both" },
 ] as const;
 
+const HARD_STOP_WINDOW_OPTIONS: readonly { value: "MORNING" | "EVENING" | "BOTH"; label: string }[] = [
+  { value: "EVENING", label: "Evening" },
+  { value: "MORNING", label: "Morning" },
+  { value: "BOTH", label: "Both" },
+] as const;
+
 const UNIT_OPTIONS: readonly { value: WeightUnit; label: string }[] = [
   { value: "KG", label: "Metric (KG)" },
   { value: "LBS", label: "Imperial (LBS)" },
@@ -225,6 +231,12 @@ export default function ProfileSettingsScreen({
   const [trainingTimePreference, setTrainingTimePreference] = useState<
     TrainingTimePreference
   >(initialProfile?.trainingTimePreference ?? "BOTH");
+  const [hardStopTrainingTime, setHardStopTrainingTime] = useState<string>(
+    initialProfile?.hardStopTrainingTime ?? "20:00"
+  );
+  const [hardStopWindow, setHardStopWindow] = useState<
+    "MORNING" | "EVENING" | "BOTH"
+  >(initialProfile?.hardStopWindow ?? "EVENING");
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -296,6 +308,8 @@ export default function ProfileSettingsScreen({
       workDayStartTime,
       workDayEndTime,
       trainingTimePreference,
+      hardStopTrainingTime,
+      hardStopWindow,
     };
 
     try {
@@ -589,6 +603,31 @@ export default function ProfileSettingsScreen({
                   value={trainingTimePreference}
                   onChange={setTrainingTimePreference}
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <div className="space-y-1.5">
+                  <label htmlFor="settings-hard-stop-time" className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
+                    Hard Stop Cutoff
+                  </label>
+                  <input
+                    id="settings-hard-stop-time"
+                    type="time"
+                    value={hardStopTrainingTime}
+                    onChange={(e) => setHardStopTrainingTime(e.target.value)}
+                    className="w-full h-10 rounded-lg border border-zinc-900 bg-zinc-950/40 px-2.5 font-mono text-xs text-zinc-100 outline-none focus:border-zinc-700 transition-all tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <span className="block text-[10px] uppercase tracking-wider font-bold text-zinc-400">
+                    Apply Hard Stop To
+                  </span>
+                  <SegmentedToggle
+                    id="settings-hard-stop-window"
+                    options={HARD_STOP_WINDOW_OPTIONS}
+                    value={hardStopWindow}
+                    onChange={setHardStopWindow}
+                  />
+                </div>
               </div>
             </section>
 

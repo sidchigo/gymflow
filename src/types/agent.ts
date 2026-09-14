@@ -47,6 +47,9 @@ export type Modality = z.infer<typeof ModalitySchema>;
 // B. Athlete Profile & Health Schemas
 // ---------------------------------------------------------------------------
 
+export const HardStopWindowSchema = z.enum(["MORNING", "EVENING", "BOTH"]);
+export type HardStopWindow = z.infer<typeof HardStopWindowSchema>;
+
 export const AthleteProfileSchema = z.object({
   userId: z.string().min(1),
   weightKg: z.number().positive(),
@@ -78,6 +81,8 @@ export const AthleteProfileSchema = z.object({
   workDayStartTime: z.string().regex(/^\d{2}:\d{2}$/).optional().default("09:00"),
   workDayEndTime: z.string().regex(/^\d{2}:\d{2}$/).optional().default("18:00"),
   trainingTimePreference: TrainingTimePreferenceSchema.optional().default("BOTH"),
+  hardStopTrainingTime: z.string().regex(/^\d{2}:\d{2}$/).optional().default("20:00"),
+  hardStopWindow: HardStopWindowSchema.optional().default("EVENING"),
 });
 export type AthleteProfile = z.infer<typeof AthleteProfileSchema>;
 

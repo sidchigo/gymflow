@@ -239,6 +239,171 @@ export const toolsList = [
 ];
 
 // ---------------------------------------------------------------------------
+// 1b. Helper Functions: Timetable Slot Filter & Raw JSON Fallback
+// ---------------------------------------------------------------------------
+
+export function filterGymSlots(
+  slots: Array<{
+    id: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    title: string;
+    trainer: string;
+    dayOfWeek?: string | undefined;
+  }>,
+  athleteState: AthleteState,
+  currentDateIST: string
+) {
+  const profile = athleteState.profile;
+  const hardStopTime = profile.hardStopTrainingTime || "20:00";
+  const hardStopWindow = profile.hardStopWindow || "EVENING";
+
+  return slots.filter((s) => {
+    const slotDateTime = `${s.date}T${s.startTime}`;
+    if (slotDateTime < currentDateIST) return false;
+
+    const startHour = s.startTime;
+    const endHour = s.endTime || s.startTime;
+    const pref = profile.trainingTimePreference || "BOTH";
+
+    const slotDateObj = new Date(`${s.date}T00:00:00+05:30`);
+    const dayName =
+      s.dayOfWeek ||
+      slotDateObj.toLocaleDateString("en-US", {
+        weekday: "long",
+        timeZone: "Asia/Kolkata",
+      });
+
+    const isWeekend = dayName === "Saturday" || dayName === "Sunday";
+
+    if (isWeekend) {
+      if (pref === "EVENING" && startHour < "12:00") return false;
+      if (pref === "MORNING" && startHour >= "12:00") return false;
+    } else {
+      const workStart = profile.workDayStartTime || "09:00";
+      if (pref === "EVENING" && startHour < "17:30") return false;
+      if (pref === "MORNING" && startHour >= workStart) return false;
+      if (pref === "BOTH" && startHour >= workStart && startHour < "17:30") return false;
+    }
+
+    const isEveningSlot = startHour >= "12:00";
+    const isMorningSlot = startHour < "12:00";
+
+    const appliesHardStop =
+      hardStopWindow === "BOTH" ||
+      (hardStopWindow === "EVENING" && isEveningSlot) ||
+      (hardStopWindow === "MORNING" && isMorningSlot);
+
+    if (appliesHardStop) {
+      const workSchedule =
+        (profile as any).weeklyWorkSchedule || (profile as any).workSchedule || {};
+      const daySchedule = workSchedule[dayName];
+      const isWFO = daySchedule?.mode === "WFO";
+      const commuteMinutes = isWFO ? (daySchedule?.commuteMinutesOneWay || 0) : 0;
+
+      const timeParts = endHour.split(":").map(Number);
+      const eH = timeParts[0] ?? 0;
+      const eM = timeParts[1] ?? 0;
+      const totalMinutes = eH * 60 + eM + commuteMinutes;
+      const compH = Math.floor(totalMinutes / 60)
+        .toString()
+        .padStart(2, "0");
+      const compM = (totalMinutes % 60).toString().padStart(2, "0");
+      const completionTime = `${compH}:${compM}`;
+
+      if (completionTime > hardStopTime) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+async function handleRawJSONFallback(
+  rawText: string,
+  userId: string,
+  isoWeekId: string,
+  currentPlanDoc: WeeklyWorkoutPlan | null,
+  currentDateIST: string,
+  toolCallsExecuted: AgentResult["toolCallsExecuted"]
+): Promise<{ text: string }> {
+  if (!rawText) return { text: "No response text generated." };
+
+  const jsonBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```|(\{\s*"plan"\s*:\s*\[[\s\S]*?\}\s*)/gi;
+  let match: RegExpExecArray | null;
+  let interceptedPlan: WeeklyWorkoutPlan | null = null;
+  let cleanText = rawText;
+
+  while ((match = jsonBlockRegex.exec(rawText)) !== null) {
+    const candidate = (match[1] || match[2] || "").trim();
+    try {
+      const parsed = safeParseJSON(candidate);
+      if (parsed && Array.isArray(parsed.plan)) {
+        const parsedArgs = ReplanWeekScheduleArgsSchema.parse(parsed);
+        const today = currentDateIST.split("T")[0] || "";
+        const existingWeekPlan = currentPlanDoc?.plan || [];
+        const sanitizedPlan = parsedArgs.plan.map((dayPlan) => {
+          let finalDay = dayPlan;
+          if (dayPlan.date < today) {
+            const existingDay = existingWeekPlan.find((p) => p.date === dayPlan.date);
+            finalDay = existingDay || dayPlan;
+          }
+          if (finalDay.isGymClass) {
+            finalDay = {
+              ...finalDay,
+              exercises: (finalDay.exercises || []).map((ex) => ({
+                ...ex,
+                supersetGroupId: null,
+                orderInGroup: null,
+              })),
+            };
+          }
+          return finalDay;
+        });
+
+        interceptedPlan = {
+          plan: sanitizedPlan,
+          reasoning: parsedArgs.reasoning || "Weekly workout plan updated based on schedule constraints.",
+          updatedAt: nowIST(),
+        };
+
+        cleanText = cleanText.replace(match[0], "").trim();
+        break;
+      }
+    } catch {
+      // Continue searching
+    }
+  }
+
+  if (interceptedPlan) {
+    await saveWeeklyWorkoutPlan(userId, isoWeekId, interceptedPlan);
+    const storeKey = scheduleWeekKey(isoWeekId);
+    const store = await getWeeklyStore(storeKey);
+    if (store) {
+      store.diffs = [];
+      await saveWeeklyStore(storeKey, store);
+    }
+
+    toolCallsExecuted.push({
+      name: "replan_week_schedule",
+      args: { plan: interceptedPlan.plan, reasoning: interceptedPlan.reasoning },
+      result: JSON.stringify({
+        success: true,
+        message: "Weekly plan successfully updated via fallback parsing.",
+      }),
+    });
+
+    if (!cleanText) {
+      cleanText = interceptedPlan.reasoning || "I have updated your weekly workout plan based on your schedule constraints.";
+    }
+  }
+
+  return { text: cleanText };
+}
+
+// ---------------------------------------------------------------------------
 // 2. System Prompt Builder
 // ---------------------------------------------------------------------------
 
@@ -257,11 +422,13 @@ export function buildSystemPrompt(params: {
 GROUND RULES:
 1. Schedule class activities matching valid Gym Timetable slots.
 2. Timetable Sync: If timetable slots list is empty, respond with "unpublished", call tool to build a baseline open strength/conditioning split, and tell user to run 'Sync Gym Schedule' when published.
-3. WFO/WFH Work Constraint: Work hours are ${profile.workDayStartTime ?? "09:00"}-${profile.workDayEndTime ?? "18:00"}. Never schedule sessions inside this window. Training preference: ${profile.trainingTimePreference ?? "BOTH"}.
-   - WFO Days: Session earliest start = workEnd + commute. Evening only.
-   - WFH Days: Session earliest start = workEnd.
-   - Morning sessions before (workStart - commute) for WFO, or workStart for WFH. Respect training preference window.
-4. Tool Usage: Do not modify plan or log lifts/events in plain text. Call 'replan_week_schedule' exactly once to update the weekly plan. Max 2 tool steps total.
+3. WFO/WFH Work & Hard Stop Constraint: Work hours are ${profile.workDayStartTime ?? "09:00"}-${profile.workDayEndTime ?? "18:00"}. Never schedule sessions inside work hours. Training preference: ${profile.trainingTimePreference ?? "BOTH"}.
+   - Hard Stop Cutoff: All training sessions must be COMPLETELY finished before ${profile.hardStopTrainingTime ?? "20:00"} (${profile.hardStopWindow ?? "EVENING"} sessions).
+   - WFO Days: Session completion time = Session End Time + Commute Minutes (return commute). Therefore: Session End Time + Commute <= ${profile.hardStopTrainingTime ?? "20:00"}. Earliest start = workEnd + commute.
+   - WFH Days: Session completion time = Session End Time (0 commute). Therefore: Session End Time <= ${profile.hardStopTrainingTime ?? "20:00"}. Earliest start = workEnd.
+   - Morning sessions before (workStart - commute) for WFO, or workStart for WFH.
+   - STRICT CUTOFF: NEVER schedule any session or class whose completion + return commute exceeds ${profile.hardStopTrainingTime ?? "20:00"}. If no gym class fits before cutoff, schedule an open floor session finishing before ${profile.hardStopTrainingTime ?? "20:00"}, or REST.
+4. Tool Usage: Do not modify plan or log lifts/events in plain text. Call 'replan_week_schedule' directly using native function tool calls to update the weekly plan. Max 2 tool steps total.
 5. Saturday can only be morning sessions, only if weekday missed. Sunday is strictly REST.
 6. Replace cancelled combat sessions (BJJ/KB) with KB/Boxing/DUT/TRX conditioning or S&C to maintain the 5-day training goal.
 7. Focus on a brief coaching explanation in the response. Do not render calendar grids or markdown tables.
@@ -288,6 +455,7 @@ ${params.weeklyCalendarAnchor}
 - Mandatory Combat: Kickboxing: ${profile.mandatoryCombatSessions?.kickboxing ?? 0}/wk, BJJ: ${profile.mandatoryCombatSessions?.bjj ?? 0}/wk
 - Diet: ${profile.dietaryPreference ?? "BALANCED"}. Protein Target: ${profile.targetDailyProteinGrams ?? 125}g
 - Work: ${profile.workDayStartTime ?? "09:00"}-${profile.workDayEndTime ?? "18:00"}. Preference: ${profile.trainingTimePreference ?? "BOTH"}
+- Hard Stop Cutoff: ${profile.hardStopTrainingTime ?? "20:00"} (Window: ${profile.hardStopWindow ?? "EVENING"})
 - Work Mode/Commute: ${Object.entries((profile as any).weeklyWorkSchedule ?? (profile as any).workSchedule ?? {}).map(([day, s]) => `${day}: ${(s as any).mode} (${(s as any).commuteMinutesOneWay}m commute)`).join(", ")}
 
 LIFT HISTORY BASES (Last 3):
@@ -305,11 +473,9 @@ ${params.gymScheduleDiffs}
 ACTIVE WEEK PLAN:
 ${params.currentPlan}
 
-Output concise, minified JSON for tool arguments. Do not include markdown commentary, extra whitespace, or redundant explanation fields inside tool payloads.
-When invoking tools, output strictly valid, minified JSON arguments. Do not generate verbose reasoning blocks, unnecessary explanatory fields, or redundant un-modified days.
-CRITICAL: Keep internal step-by-step reasoning concise (under 200 words). Do not reconstruct entire timetables or enumerate full schedule lists in your thinking trace. Determine the swap and invoke \`replan_week_schedule\` immediately.
-
-Output Style: Write user-facing explanations in clear, polished, and professional language. Never leak internal variable names, unclosed parentheses, or corrupted transitions. Proofread coaching advice for grammatical coherence before emitting text.
+INSTRUCTIONS:
+1. Pass valid JSON parameters directly when making function tool calls.
+2. Output Style: Write user-facing text in clear, natural markdown coaching tone. NEVER print raw JSON code blocks or tool arguments in your user-facing response text.
 `;
 }
 // ---------------------------------------------------------------------------
@@ -381,29 +547,8 @@ export async function runCoachAgent(params: {
     { role: "user", parts: [{ text: userMessage }] },
   ];
 
-  // Filter gym timetable slots to upcoming/active window only
-  const filteredSlots = (weeklyGymStore?.slots || []).filter((s) => {
-    const slotDateTime = `${s.date}T${s.startTime}`;
-    if (slotDateTime < currentDateIST) return false;
-    const startHour = s.startTime;
-    const pref = athleteState.profile.trainingTimePreference || "BOTH";
-    const slotDateObj = new Date(`${s.date}T00:00:00+05:30`);
-    const dayName = s.dayOfWeek || slotDateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" });
-    const isWeekend = dayName === "Saturday" || dayName === "Sunday";
-    if (isWeekend) {
-      if (pref === "EVENING") return startHour >= "12:00";
-      if (pref === "MORNING") return startHour < "12:00";
-      return true;
-    }
-    const workStart = athleteState.profile.workDayStartTime || "09:00";
-    if (pref === "EVENING") {
-      return startHour >= "17:30";
-    } else if (pref === "MORNING") {
-      return startHour < workStart;
-    } else {
-      return startHour < workStart || startHour >= "17:30";
-    }
-  });
+  // Filter gym timetable slots using helper (training window & hard stop cutoff)
+  const filteredSlots = filterGymSlots(weeklyGymStore?.slots || [], athleteState, currentDateIST);
 
   const slotsText =
     filteredSlots.length > 0
@@ -604,8 +749,16 @@ export async function runCoachAgent(params: {
       toolCallsExecuted,
     };
   } else {
+    const fallbackResult = await handleRawJSONFallback(
+      completion.text || "",
+      userId,
+      isoWeekId,
+      currentPlanDoc,
+      currentDateIST,
+      toolCallsExecuted
+    );
     return {
-      text: completion.text || "No response text generated.",
+      text: fallbackResult.text || "No response text generated.",
       toolCallsExecuted,
     };
   }
@@ -654,29 +807,8 @@ export async function runCoachAgentStream(params: {
     { role: "user", parts: [{ text: userMessage }] },
   ];
 
-  // Filter gym timetable slots to upcoming/active window only
-  const filteredSlots = (weeklyGymStore?.slots || []).filter((s) => {
-    const slotDateTime = `${s.date}T${s.startTime}`;
-    if (slotDateTime < currentDateIST) return false;
-    const startHour = s.startTime;
-    const pref = athleteState.profile.trainingTimePreference || "BOTH";
-    const slotDateObj = new Date(`${s.date}T00:00:00+05:30`);
-    const dayName = s.dayOfWeek || slotDateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" });
-    const isWeekend = dayName === "Saturday" || dayName === "Sunday";
-    if (isWeekend) {
-      if (pref === "EVENING") return startHour >= "12:00";
-      if (pref === "MORNING") return startHour < "12:00";
-      return true;
-    }
-    const workStart = athleteState.profile.workDayStartTime || "09:00";
-    if (pref === "EVENING") {
-      return startHour >= "17:30";
-    } else if (pref === "MORNING") {
-      return startHour < workStart;
-    } else {
-      return startHour < workStart || startHour >= "17:30";
-    }
-  });
+  // Filter gym timetable slots using helper (training window & hard stop cutoff)
+  const filteredSlots = filterGymSlots(weeklyGymStore?.slots || [], athleteState, currentDateIST);
 
   const slotsText =
     filteredSlots.length > 0
@@ -956,8 +1088,16 @@ export async function runCoachAgentStream(params: {
       toolCallsExecuted,
     };
   } else {
+    const fallbackResult = await handleRawJSONFallback(
+      directText || "",
+      userId,
+      isoWeekId,
+      currentPlanDoc,
+      currentDateIST,
+      toolCallsExecuted
+    );
     return {
-      text: directText,
+      text: fallbackResult.text || "No response text generated.",
       toolCallsExecuted,
     };
   }

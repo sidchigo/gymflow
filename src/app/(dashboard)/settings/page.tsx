@@ -60,6 +60,8 @@ export default async function SettingsPage() {
         workDayStartTime: "09:00",
         workDayEndTime: "18:00",
         trainingTimePreference: "BOTH",
+        hardStopTrainingTime: "20:00",
+        hardStopWindow: "EVENING",
       },
       lifts: [],
       events: [],
