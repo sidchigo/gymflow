@@ -65,6 +65,24 @@ export default function Login() {
     }
   };
 
+  const handleLaunchDemo = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/auth/demo", { method: "POST" });
+      if (res.ok) {
+        router.push("/");
+        router.refresh();
+      } else {
+        throw new Error("Failed to enter demo mode");
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to launch demo sandbox.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-zinc-950 px-4 font-sans text-zinc-200">
       <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-900/60 p-8 shadow-2xl backdrop-blur-md">
@@ -144,6 +162,18 @@ export default function Login() {
             </button>
           </form>
         )}
+
+        <div className="mt-6 pt-6 border-t border-zinc-800 text-center">
+          <p className="text-xs text-zinc-400 mb-3">Recruiter / Portfolio Review?</p>
+          <button
+            type="button"
+            onClick={handleLaunchDemo}
+            disabled={loading}
+            className="w-full rounded-lg border border-purple-500/40 bg-purple-950/30 hover:bg-purple-900/40 py-2.5 px-4 font-semibold text-purple-200 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer"
+          >
+            🚀 Launch Recruiter Demo Sandbox
+          </button>
+        </div>
       </div>
     </div>
   );

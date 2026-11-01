@@ -32,6 +32,7 @@ import {
   scheduleWeekKey,
 } from "@/lib/redis";
 import { getGymClient, GymUnavailableError } from "@/lib/gym-client";
+import { isDemoMode, getAdapter } from "@/lib/adapters";
 
 // ---------------------------------------------------------------------------
 // IST timezone constant
@@ -427,7 +428,13 @@ export type SyncResult =
 export async function getOrSyncWeeklySchedule(
   userId: string,
   options?: { forceRefresh?: boolean | undefined; targetWeekId?: string | undefined } | undefined,
+  bypassAdapter?: boolean,
 ): Promise<SyncResult> {
+  if (isDemoMode() && !bypassAdapter) {
+    const store = await getAdapter().syncWeeklySchedule(userId, options);
+    return { fromCache: false, isStaleFallback: false, store };
+  }
+
   const forceRefresh = options?.forceRefresh ?? false;
   const targetWeekId = options?.targetWeekId;
   const tag = `[schedule-service:cache] userId=${userId}`;

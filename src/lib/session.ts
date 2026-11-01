@@ -17,6 +17,7 @@
 
 import { SignJWT, jwtVerify, type JWTPayload } from "jose";
 import { type NextResponse } from "next/server";
+import { isDemoMode } from "@/lib/adapters";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -52,7 +53,7 @@ function getSigningKey(): Uint8Array {
   if (!secret) {
     throw new Error(
       "SESSION_JWT_SECRET is not set. " +
-        "Generate with: openssl rand -hex 32",
+      "Generate with: openssl rand -hex 32",
     );
   }
   return new TextEncoder().encode(secret);
@@ -99,11 +100,19 @@ export async function getSessionFromRequest(
   const cookieHeader = request.headers.get("cookie") ?? "";
   const cookieValue = parseCookie(cookieHeader, COOKIE_NAME);
 
-  if (!cookieValue) return null;
+  if (!cookieValue) {
+    if (isDemoMode()) {
+      return { userId: "demo-athlete", role: "MEMBER" };
+    }
+    return null;
+  }
 
   try {
     return await verifySessionToken(cookieValue);
   } catch {
+    if (isDemoMode()) {
+      return { userId: "demo-athlete", role: "MEMBER" };
+    }
     return null;
   }
 }

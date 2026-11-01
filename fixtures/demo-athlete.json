@@ -1,0 +1,168 @@
+{
+  "profile": {
+    "userId": "demo-athlete",
+    "weightKg": 72.5,
+    "heightCm": 175,
+    "targetDaysPerWeek": 5,
+    "weightUnitPreference": "KG",
+    "mandatoryCombatSessions": {
+      "kickboxing": 1,
+      "bjj": 1
+    },
+    "weeklyWorkSchedule": {
+      "Monday": {
+        "mode": "WFH",
+        "commuteMinutesOneWay": 0
+      },
+      "Tuesday": {
+        "mode": "WFO",
+        "commuteMinutesOneWay": 45
+      },
+      "Wednesday": {
+        "mode": "WFH",
+        "commuteMinutesOneWay": 0
+      },
+      "Thursday": {
+        "mode": "WFO",
+        "commuteMinutesOneWay": 45
+      },
+      "Friday": {
+        "mode": "WFH",
+        "commuteMinutesOneWay": 0
+      },
+      "Saturday": {
+        "mode": "WFH",
+        "commuteMinutesOneWay": 0
+      },
+      "Sunday": {
+        "mode": "WFH",
+        "commuteMinutesOneWay": 0
+      }
+    },
+    "modalities": [
+      "KICKBOXING",
+      "BJJ",
+      "UPPER_HYPERTROPHY",
+      "LOWER_STRENGTH",
+      "KB_CONDITIONING",
+      "BOXING_CONDITIONING",
+      "MOBILITY_RECOVERY",
+      "REST"
+    ],
+    "dietaryPreference": "BALANCED",
+    "targetDailyProteinGrams": 145,
+    "workDayStartTime": "09:00",
+    "workDayEndTime": "18:00",
+    "trainingTimePreference": "EVENING",
+    "hardStopTrainingTime": "20:30",
+    "hardStopWindow": "EVENING"
+  },
+  "lifts": [
+    {
+      "date": "2026-08-17",
+      "exerciseName": "Barbell Bench Press",
+      "sets": [
+        {
+          "setNumber": 1,
+          "weight": 70,
+          "unit": "KG",
+          "repsCompleted": 6,
+          "rpe": 8
+        },
+        {
+          "setNumber": 2,
+          "weight": 70,
+          "unit": "KG",
+          "repsCompleted": 6,
+          "rpe": 8
+        },
+        {
+          "setNumber": 3,
+          "weight": 70,
+          "unit": "KG",
+          "repsCompleted": 5,
+          "rpe": 8.5
+        }
+      ],
+      "notes": "Solid bar path, pause at chest felt controlled"
+    },
+    {
+      "date": "2026-08-18",
+      "exerciseName": "Barbell Back Squat",
+      "sets": [
+        {
+          "setNumber": 1,
+          "weight": 95,
+          "unit": "KG",
+          "repsCompleted": 5,
+          "rpe": 7.5
+        },
+        {
+          "setNumber": 2,
+          "weight": 95,
+          "unit": "KG",
+          "repsCompleted": 5,
+          "rpe": 8
+        },
+        {
+          "setNumber": 3,
+          "weight": 95,
+          "unit": "KG",
+          "repsCompleted": 5,
+          "rpe": 8
+        }
+      ],
+      "notes": "Depth parallel, good ankle mobility"
+    },
+    {
+      "date": "2026-08-20",
+      "exerciseName": "Pendlay Row",
+      "sets": [
+        {
+          "setNumber": 1,
+          "weight": 60,
+          "unit": "KG",
+          "repsCompleted": 8,
+          "rpe": 7.5
+        },
+        {
+          "setNumber": 2,
+          "weight": 60,
+          "unit": "KG",
+          "repsCompleted": 8,
+          "rpe": 8
+        }
+      ],
+      "notes": "Explosive pull from floor"
+    },
+    {
+      "date": "2026-08-21",
+      "exerciseName": "Barbell Deadlift",
+      "sets": [
+        {
+          "setNumber": 1,
+          "weight": 120,
+          "unit": "KG",
+          "repsCompleted": 5,
+          "rpe": 8
+        },
+        {
+          "setNumber": 2,
+          "weight": 120,
+          "unit": "KG",
+          "repsCompleted": 5,
+          "rpe": 8.5
+        }
+      ],
+      "notes": "Double overhand with chalk"
+    }
+  ],
+  "events": [
+    {
+      "date": "2026-08-23",
+      "type": "SORENESS_OVERLOAD",
+      "severity": "MILD",
+      "notes": "Mild anterior shoulder and adductor fatigue after Saturday live sparring session"
+    }
+  ]
+}

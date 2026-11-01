@@ -25,23 +25,63 @@ import {
   type WeeklyWorkoutPlan,
 } from "@/types/agent";
 
+import { isDemoMode, getAdapter } from "@/lib/adapters";
+
 // ---------------------------------------------------------------------------
-// Client
+// Client & In-Memory Fallback
 // ---------------------------------------------------------------------------
 
-/**
- * Module-level Redis client initialised via `Redis.fromEnv()`.
- * The Upstash SDK reads `UPSTASH_REDIS_REST_URL` and
- * `UPSTASH_REDIS_REST_TOKEN` automatically and throws if either is absent.
- *
- * In mock mode (`GYM_USE_MOCK=true`) this module is imported but the helper
- * functions below are never called, so missing env vars won't cause a crash.
- */
-const redis = Redis.fromEnv();
+export interface RedisStore {
+  get<T = unknown>(key: string): Promise<T | null>;
+  set(key: string, value: unknown, opts?: { ex?: number }): Promise<unknown>;
+  del(key: string): Promise<number>;
+}
 
-/** Exposed for the rare case where a route needs the raw client. */
-export function getRedis(): Redis {
-  return redis;
+const inMemoryDb = new Map<string, unknown>();
+let cachedRedisClient: RedisStore | null = null;
+
+export function getRedis(): RedisStore {
+  if (cachedRedisClient) return cachedRedisClient;
+
+  const url = process.env.UPSTASH_REDIS_REST_URL;
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+  if (
+    url &&
+    token &&
+    url.startsWith("http") &&
+    !url.includes("<your-upstash-endpoint>") &&
+    !url.includes("test.upstash.io") &&
+    token !== "test-token" &&
+    token !== "REPLACE_WITH_UPSTASH_TOKEN" &&
+    process.env.NODE_ENV !== "test"
+  ) {
+    try {
+      const client = new Redis({ url, token });
+      cachedRedisClient = client as unknown as RedisStore;
+      return cachedRedisClient;
+    } catch (e) {
+      console.warn("[Redis] Failed to initialize Upstash client, using in-memory store:", e);
+    }
+  }
+
+  // Fallback in-memory store for local testing & development
+  cachedRedisClient = {
+    async get<T = unknown>(key: string): Promise<T | null> {
+      const val = inMemoryDb.get(key);
+      if (val === undefined || val === null) return null;
+      return val as T;
+    },
+    async set(key: string, value: unknown): Promise<"OK" | null> {
+      inMemoryDb.set(key, value);
+      return "OK";
+    },
+    async del(key: string): Promise<number> {
+      return inMemoryDb.delete(key) ? 1 : 0;
+    },
+  };
+
+  return cachedRedisClient;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,6 +104,9 @@ export async function storeGymToken(
   userId: string,
   token: string,
 ): Promise<void> {
+  if (isDemoMode()) {
+    return getAdapter().storeGymToken(userId, token);
+  }
   await getRedis().set(gymTokenKey(userId), token, { ex: GYM_TOKEN_TTL });
 }
 
@@ -72,6 +115,9 @@ export async function storeGymToken(
  * Returns `null` if the key does not exist or has expired.
  */
 export async function getGymToken(userId: string): Promise<string | null> {
+  if (isDemoMode()) {
+    return getAdapter().getGymToken(userId);
+  }
   return getRedis().get<string>(gymTokenKey(userId));
 }
 
@@ -151,6 +197,9 @@ export function planWeekKey(userId: string, isoWeekId: string): string {
 export async function getAthleteState(
   userId: string,
 ): Promise<AthleteState | null> {
+  if (isDemoMode()) {
+    return getAdapter().getAthleteState(userId);
+  }
   const key = athleteStateKey(userId);
   const raw = await getRedis().get<unknown>(key);
   if (raw === null || raw === undefined) return null;
@@ -174,6 +223,9 @@ export async function saveAthleteState(
   userId: string,
   state: AthleteState,
 ): Promise<void> {
+  if (isDemoMode()) {
+    return getAdapter().saveAthleteState(userId, state);
+  }
   const key = athleteStateKey(userId);
   await getRedis().set(key, state, { ex: ATHLETE_STATE_TTL });
 }
@@ -185,6 +237,9 @@ export async function getWeeklyWorkoutPlan(
   userId: string,
   isoWeekId: string,
 ): Promise<WeeklyWorkoutPlan | null> {
+  if (isDemoMode()) {
+    return getAdapter().getWeeklyWorkoutPlan(userId, isoWeekId);
+  }
   const key = planWeekKey(userId, isoWeekId);
   const raw = await getRedis().get<unknown>(key);
   if (raw === null || raw === undefined) return null;
@@ -209,7 +264,28 @@ export async function saveWeeklyWorkoutPlan(
   isoWeekId: string,
   plan: WeeklyWorkoutPlan,
 ): Promise<void> {
+  if (isDemoMode()) {
+    return getAdapter().saveWeeklyWorkoutPlan(userId, isoWeekId, plan);
+  }
   const key = planWeekKey(userId, isoWeekId);
   await getRedis().set(key, plan, { ex: PLAN_TTL });
 }
+
+// ---------------------------------------------------------------------------
+// Telegram Chat Mapping Helpers
+// ---------------------------------------------------------------------------
+
+export async function linkTelegramChat(chatId: string | number, userId: string): Promise<void> {
+  await getRedis().set(`telegram:chat:${chatId}:user`, userId);
+  await getRedis().set(`telegram:user:${userId}:chat`, String(chatId));
+}
+
+export async function getUserIdByTelegramChat(chatId: string | number): Promise<string | null> {
+  return getRedis().get<string>(`telegram:chat:${chatId}:user`);
+}
+
+export async function getTelegramChatByUserId(userId: string): Promise<string | null> {
+  return getRedis().get<string>(`telegram:user:${userId}:chat`);
+}
+
 

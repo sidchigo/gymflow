@@ -1,0 +1,155 @@
+[
+  {
+    "id": "slot_kb_mon",
+    "date": "2026-08-24",
+    "startTime": "18:30",
+    "endTime": "19:30",
+    "title": "Kickboxing / S&C",
+    "trainer": "Vikram Rao"
+  },
+  {
+    "id": "slot_bjj_mon",
+    "date": "2026-08-24",
+    "startTime": "19:30",
+    "endTime": "20:30",
+    "title": "BJJ Ground Game (Fundamentals)",
+    "trainer": "Marcus Silva"
+  },
+  {
+    "id": "slot_open_mon",
+    "date": "2026-08-24",
+    "startTime": "12:00",
+    "endTime": "13:00",
+    "title": "Open Gym Strength & Conditioning",
+    "trainer": "Open Floor"
+  },
+  {
+    "id": "slot_kb_tue",
+    "date": "2026-08-25",
+    "startTime": "19:00",
+    "endTime": "20:00",
+    "title": "Kickboxing Striking & Combinations",
+    "trainer": "Alex Vance"
+  },
+  {
+    "id": "slot_open_tue",
+    "date": "2026-08-25",
+    "startTime": "18:45",
+    "endTime": "19:45",
+    "title": "Open Gym Powerlifting & Core",
+    "trainer": "Open Floor"
+  },
+  {
+    "id": "slot_bjj_wed",
+    "date": "2026-08-26",
+    "startTime": "19:00",
+    "endTime": "20:00",
+    "title": "BJJ Ground Game & Grappling",
+    "trainer": "Marcus Silva"
+  },
+  {
+    "id": "slot_kb_wed",
+    "date": "2026-08-26",
+    "startTime": "18:30",
+    "endTime": "19:30",
+    "title": "Kickboxing Sparring Tech",
+    "trainer": "Vikram Rao"
+  },
+  {
+    "id": "slot_open_wed",
+    "date": "2026-08-26",
+    "startTime": "12:00",
+    "endTime": "13:00",
+    "title": "Open Mat & Mobility",
+    "trainer": "Open Floor"
+  },
+  {
+    "id": "slot_box_thu",
+    "date": "2026-08-27",
+    "startTime": "19:00",
+    "endTime": "20:00",
+    "title": "Boxing Conditioning & Footwork",
+    "trainer": "Alex Vance"
+  },
+  {
+    "id": "slot_open_thu",
+    "date": "2026-08-27",
+    "startTime": "18:45",
+    "endTime": "19:45",
+    "title": "Open Gym Hypertrophy",
+    "trainer": "Open Floor"
+  },
+  {
+    "id": "slot_bjj_fri",
+    "date": "2026-08-28",
+    "startTime": "19:00",
+    "endTime": "20:00",
+    "title": "BJJ Open Mat & Live Sparring",
+    "trainer": "Marcus Silva"
+  },
+  {
+    "id": "slot_kb_fri",
+    "date": "2026-08-28",
+    "startTime": "18:30",
+    "endTime": "19:30",
+    "title": "Kickboxing / Combat Conditioning",
+    "trainer": "Vikram Rao"
+  },
+  {
+    "id": "slot_open_fri",
+    "date": "2026-08-28",
+    "startTime": "12:00",
+    "endTime": "13:00",
+    "title": "Open Gym Free Lifting",
+    "trainer": "Open Floor"
+  },
+  {
+    "id": "slot_kb_sat",
+    "date": "2026-08-29",
+    "startTime": "08:30",
+    "endTime": "09:30",
+    "title": "Kickboxing Weekend Drills",
+    "trainer": "Vikram Rao"
+  },
+  {
+    "id": "slot_bjj_sat",
+    "date": "2026-08-29",
+    "startTime": "10:00",
+    "endTime": "11:00",
+    "title": "BJJ Weekend Grappling Flow",
+    "trainer": "Marcus Silva"
+  },
+  {
+    "id": "slot_cond_sat",
+    "date": "2026-08-29",
+    "startTime": "11:30",
+    "endTime": "12:30",
+    "title": "Full Body Conditioning & Kettlebells",
+    "trainer": "Sarah Jenkins"
+  },
+  {
+    "id": "slot_open_sat",
+    "date": "2026-08-29",
+    "startTime": "12:00",
+    "endTime": "17:00",
+    "title": "Open Gym Free Access",
+    "trainer": "Open Floor"
+  },
+  {
+    "id": "slot_mob_sun",
+    "date": "2026-08-30",
+    "startTime": "09:00",
+    "endTime": "10:00",
+    "title": "Mobility & Active Recovery",
+    "trainer": "Priya Sharma"
+  },
+  {
+    "id": "slot_open_sun",
+    "date": "2026-08-30",
+    "startTime": "10:00",
+    "endTime": "14:00",
+    "title": "Open Gym Free Access",
+    "trainer": "Open Floor"
+  }
+]
+
