@@ -32,7 +32,7 @@ function lowercaseSchemaTypes(schema: any): any {
   return result;
 }
 
-import { safeParseJSON } from "../json-utils";
+import { safeParseJSON, parseLooseJSObject } from "../json-utils";
 
 function parseDSMLToolCalls(text: string): {
   cleanText: string;
@@ -40,7 +40,21 @@ function parseDSMLToolCalls(text: string): {
 } {
   const toolCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
 
-  // Match standard DSML tool_calls block
+  // 1. Gemma / Google pseudo function call syntax: call:function_name{...}
+  const gemmaCallRegex = /call:([a-zA-Z0-9_]+)\s*(\{[\s\S]*?\})(?=(?:\n\s*call:|\n\s*thought|$))/gi;
+  let gemmaMatch: RegExpExecArray | null;
+  while ((gemmaMatch = gemmaCallRegex.exec(text)) !== null) {
+    const toolName = gemmaMatch[1];
+    const bodyRaw = gemmaMatch[2];
+    if (toolName && bodyRaw) {
+      const parsed = parseLooseJSObject(bodyRaw);
+      if (parsed && typeof parsed === "object") {
+        toolCalls.push({ name: toolName, args: parsed });
+      }
+    }
+  }
+
+  // 2. Match standard DSML tool_calls block
   const dsmlBlockRegex = /<[｜|]?(?:DSML[｜|]?)?tool_calls[｜|]?>([\s\S]*?)<\/[｜|]?(?:DSML[｜|]?)?tool_calls[｜|]?>/gi;
   let match: RegExpExecArray | null;
 
@@ -75,7 +89,7 @@ function parseDSMLToolCalls(text: string): {
     }
   }
 
-  // Handle unclosed/partial invoke tag if stream was truncated
+  // 3. Handle unclosed/partial invoke tag if stream was truncated
   if (toolCalls.length === 0) {
     const unclosedInvokeRegex = /<[｜|]?(?:DSML[｜|]?)?invoke\s+name=["']([^"']+)["'][^>]*>([\s\S]*?)(?:<\/[｜|]?(?:DSML[｜|]?)?invoke[｜|]?>|$)/gi;
     let unclosedMatch: RegExpExecArray | null;
@@ -105,7 +119,7 @@ function parseDSMLToolCalls(text: string): {
     }
   }
 
-  // Single tool_call format fallback
+  // 4. Single tool_call format fallback
   const singleToolCallRegex = /<[｜|]?tool_call[｜|]?>([\s\S]*?)<\/[｜|]?tool_call[｜|]?>/gi;
   while ((match = singleToolCallRegex.exec(text)) !== null) {
     try {
@@ -124,6 +138,9 @@ function parseDSMLToolCalls(text: string): {
   const cleanText = text
     .replace(/<[｜|]?(?:DSML[｜|]?)?tool_calls[｜|]?>[\s\S]*?(?:<\/[｜|]?(?:DSML[｜|]?)?tool_calls[｜|]?>|$)/gi, "")
     .replace(/<[｜|]?tool_call[｜|]?>[\s\S]*?(?:<\/[｜|]?tool_call[｜|]?>|$)/gi, "")
+    .replace(/<thought>[\s\S]*?<\/thought>/gi, "")
+    .replace(/^thought\b[\s\S]*?(?=(?:call:|\n\n[A-Z]|$))/gi, "")
+    .replace(/call:[a-zA-Z0-9_]+\s*\{[\s\S]*?\}/gi, "")
     .trim();
 
   return { cleanText, toolCalls };
@@ -173,9 +190,15 @@ export class OpenAICompatibleProvider implements LLMProvider {
       if (!m) continue;
 
       if (m.role === "tool") {
+        const lastAssistant = [...openAIMessages].reverse().find((msg) => msg.role === "assistant" && msg.tool_calls?.length);
+        const fallbackId = lastAssistant?.tool_calls?.[0]?.id || "call_0_0";
+        const validId = m.tool_call_id && !m.tool_call_id.startsWith("call_fallback_")
+          ? m.tool_call_id
+          : fallbackId;
+
         openAIMessages.push({
           role: "tool",
-          tool_call_id: m.tool_call_id,
+          tool_call_id: validId,
           content: m.content || "",
         });
         continue;
@@ -213,7 +236,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         if (toolParts.length > 0) {
           assistantMsg.tool_calls = toolParts.map((p, idx) => {
             const fc = p.functionCall!;
-            const callId = `call_${i}_${idx}`;
+            const callId = (fc as any).id || callIdMap.get(fc.name) || `call_${i}_${idx}`;
             callIdMap.set(fc.name, callId);
             return {
               id: callId,
@@ -251,8 +274,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
       body.tool_choice = params.toolChoice !== undefined ? params.toolChoice : "auto";
     }
 
-    const isDeepSeekOrOpenRouter = modelName.startsWith("deepseek/") || this.baseUrl.includes("openrouter.ai");
-    if (isDeepSeekOrOpenRouter) {
+    const isReasoningModel =
+      modelName.includes("deepseek-r1") ||
+      modelName.includes("deepseek/deepseek-reasoner") ||
+      modelName.includes("-r1") ||
+      modelName.includes("/r1") ||
+      modelName.includes("reasoning");
+
+    if (isReasoningModel) {
       body.reasoning = { enabled: true };
       if (params.response_format !== undefined) {
         body.response_format = params.response_format;
@@ -364,9 +393,15 @@ export class OpenAICompatibleProvider implements LLMProvider {
       if (!m) continue;
 
       if (m.role === "tool") {
+        const lastAssistant = [...openAIMessages].reverse().find((msg) => msg.role === "assistant" && msg.tool_calls?.length);
+        const fallbackId = lastAssistant?.tool_calls?.[0]?.id || "call_0_0";
+        const validId = m.tool_call_id && !m.tool_call_id.startsWith("call_fallback_")
+          ? m.tool_call_id
+          : fallbackId;
+
         openAIMessages.push({
           role: "tool",
-          tool_call_id: m.tool_call_id,
+          tool_call_id: validId,
           content: m.content || "",
         });
         continue;
@@ -403,7 +438,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         if (toolParts.length > 0) {
           assistantMsg.tool_calls = toolParts.map((p, idx) => {
             const fc = p.functionCall!;
-            const callId = `call_${i}_${idx}`;
+            const callId = (fc as any).id || callIdMap.get(fc.name) || `call_${i}_${idx}`;
             callIdMap.set(fc.name, callId);
             return {
               id: callId,
@@ -441,8 +476,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
       body.tool_choice = params.toolChoice !== undefined ? params.toolChoice : "auto";
     }
 
-    const isDeepSeekOrOpenRouter = modelName.startsWith("deepseek/") || this.baseUrl.includes("openrouter.ai");
-    if (isDeepSeekOrOpenRouter) {
+    const isReasoningModel =
+      modelName.includes("deepseek-r1") ||
+      modelName.includes("deepseek/deepseek-reasoner") ||
+      modelName.includes("-r1") ||
+      modelName.includes("/r1") ||
+      modelName.includes("reasoning");
+
+    if (isReasoningModel) {
       body.reasoning = { enabled: true };
       if (params.response_format !== undefined) {
         body.response_format = params.response_format;
@@ -464,7 +505,15 @@ export class OpenAICompatibleProvider implements LLMProvider {
     const startTime = performance.now();
     
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(new Error("LLM completion stream read timeout")), 120000);
+    let idleTimeoutId: any;
+    const resetIdleTimeout = () => {
+      if (idleTimeoutId) clearTimeout(idleTimeoutId);
+      idleTimeoutId = setTimeout(
+        () => controller.abort(new Error("LLM completion stream idle timeout (no tokens received for 60s)")),
+        60000
+      );
+    };
+    resetIdleTimeout();
 
     let response: Response;
     let streamedTextAccumulator = "";
@@ -483,12 +532,12 @@ export class OpenAICompatibleProvider implements LLMProvider {
         throw new Error(`OpenAI Provider API returned status ${response.status}: ${errorText}`);
       }
     } catch (err: any) {
-      clearTimeout(timeoutId);
+      if (idleTimeoutId) clearTimeout(idleTimeoutId);
       throw err;
     }
 
     if (!response.body) {
-      clearTimeout(timeoutId);
+      if (idleTimeoutId) clearTimeout(idleTimeoutId);
       throw new Error("No response body stream");
     }
 
@@ -505,6 +554,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
+        resetIdleTimeout();
 
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split("\n");
@@ -527,22 +577,28 @@ export class OpenAICompatibleProvider implements LLMProvider {
             if (content) {
               streamedTextAccumulator += content;
 
-              const dsmlIndex = streamedTextAccumulator.search(/<[｜|]?(?:DSML[｜|]?)?tool_calls|<[｜|]?invoke|<[｜|]?tool_call/i);
-              if (dsmlIndex === -1) {
+              const cleanContent = content
+                .replace(/<[|｜]?(?:channel|thought|end_thought)[|｜]?>/gi, "")
+                .replace(/<channel[|｜]?>/gi, "")
+                .replace(/<[|｜]?channel>/gi, "")
+                .replace(/<[|｜]?(?:channel|thought)[|｜]?>thought/gi, "")
+                .replace(/<[|｜]?(?:DSML[|｜]?)?tool_calls[\s\S]*?$/i, "")
+                .replace(/<[|｜]?tool_call[\s\S]*?$/i, "")
+                .replace(/call:[a-zA-Z0-9_]+\s*\{[\s\S]*?\}/gi, "");
+
+              const isInternalToolOrThought = /^(?:thought\b|<[｜|]?(?:DSML[｜|]?)?tool_calls|<[｜|]?invoke|<[｜|]?tool_call|<[|｜]?(?:channel|thought)|call:[a-zA-Z0-9_]+)/i.test(
+                streamedTextAccumulator.trim()
+              );
+
+              if (!isInternalToolOrThought && cleanContent) {
                 if (params.onToken) {
-                  params.onToken(content);
+                  params.onToken(cleanContent);
                 }
-                yield { text: content };
+                yield { text: cleanContent };
               } else {
-                const toolMatch = streamedTextAccumulator.match(/<[｜|]?(?:DSML[｜|]?)?invoke\s+name=["']([^"']+)["']/i);
-                if (toolMatch && toolMatch[1]) {
-                  const toolName = toolMatch[1];
-                  const statusMsg = toolName === 'replan_week_schedule' 
-                    ? 'Updating your 7-day training schedule...' 
-                    : `Checking ${toolName.replace(/_/g, ' ')}...`;
-                  if (params.onStatus) {
-                    params.onStatus(statusMsg);
-                  }
+                const statusMsg = "Updating your 7-day athletic training schedule...";
+                if (params.onStatus) {
+                  params.onStatus(statusMsg);
                 }
               }
             }
@@ -649,7 +705,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         }
       }
     } finally {
-      clearTimeout(timeoutId);
+      if (idleTimeoutId) clearTimeout(idleTimeoutId);
       reader.releaseLock();
     }
 

@@ -159,3 +159,38 @@ export function safeParseJSON(str: unknown): any {
   // Final attempt: re-throw on cleaned
   return JSON.parse(cleaned);
 }
+
+/**
+ * Parses loose JS object notation with unquoted keys and unquoted strings
+ * (commonly emitted by Gemma, Llama, and Mistral pseudo-function calls).
+ */
+export function parseLooseJSObject(str: string): any {
+  if (!str || typeof str !== "string") return null;
+  const trimmed = str.trim();
+
+  // 1. Try safeParseJSON first
+  try {
+    const parsed = safeParseJSON(trimmed);
+    if (parsed && typeof parsed === "object") return parsed;
+  } catch {}
+
+  // 2. Normalize unquoted keys and basic unquoted string values
+  try {
+    let normalized = cleanJSONString(trimmed)
+      // Quote unquoted object keys: {key: or , key: -> {"key":
+      .replace(/([{,]\s*)([a-zA-Z0-9_$-]+)\s*:/g, '$1"$2":')
+      // Quote unquoted string values like day:Monday, modality:KICKBOXING
+      .replace(/:\s*([a-zA-Z_][a-zA-Z0-9_ -]*?)(?=\s*[,}\]])/g, (_, val) => {
+        const v = val.trim();
+        if (v === "true" || v === "false" || v === "null" || !isNaN(Number(v))) {
+          return `:${v}`;
+        }
+        return `:"${v}"`;
+      });
+
+    return safeParseJSON(normalized);
+  } catch {}
+
+  return null;
+}
+
