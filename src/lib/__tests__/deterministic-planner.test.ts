@@ -122,6 +122,29 @@ describe("Deterministic Constraint & Plan Solver", () => {
     expect(benchEx?.progressionNote).toContain("+2.5 kg");
   });
 
+  it("auto-regulates plan when acute illness is logged", () => {
+    const sickState: AthleteState = {
+      ...athleteState,
+      events: [
+        {
+          date: "2026-08-24",
+          type: "ILLNESS",
+          severity: "SEVERE",
+          notes: "Viral fever and acute body ache",
+        },
+      ],
+    };
+
+    const plan = generateDeterministicWeekPlan({
+      athleteState: sickState,
+      weeklyGymStoreSlots: sampleSlots,
+      currentDateIST: "2026-08-24T08:00:00+05:30",
+    });
+
+    const monday = plan.plan.find((d) => d.date === "2026-08-24");
+    expect(monday?.modality).toBe("MOBILITY_RECOVERY");
+  });
+
   it("validates and repairs illegal plans from rogue LLM generations", () => {
     const roguePlan = [
       {

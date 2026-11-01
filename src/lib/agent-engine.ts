@@ -59,6 +59,11 @@ export const replanWeekScheduleTool: LLMToolDefinition = {
         description:
           "Clear coaching explanation of why this split was selected given the work schedule, fatigue, and gym timetable.",
       },
+      missedDate: {
+        type: "string",
+        description:
+          "Optional YYYY-MM-DD date if athlete reported a missed workout to be marked as rest.",
+      },
       plan: {
         type: "array",
         description: "Optional 7-day plan overrides from Monday through Sunday if specific day modifications were requested.",
@@ -471,6 +476,19 @@ export async function runCoachAgent(params: {
     await saveAthleteState(userId, athleteState);
   }
 
+  const todayDateStr = currentDateIST.split("T")[0] || "";
+  if (/(?:skipped|missed|skipping|skip)\s*(?:today|this class|the class|my workout|today's|session)/i.test(userMessage)) {
+    if (!athleteState.events.some((e) => e.date === todayDateStr && e.type === "MISSED_SESSION")) {
+      athleteState.events.push({
+        date: todayDateStr,
+        type: "MISSED_SESSION",
+        severity: "MILD",
+        notes: "Session skipped by athlete request.",
+      });
+      await saveAthleteState(userId, athleteState);
+    }
+  }
+
 
 
   let [weeklyGymStore, currentPlanDoc] = await Promise.all([
@@ -793,6 +811,19 @@ export async function runCoachAgentStream(params: {
   if (!athleteState) {
     athleteState = getDefaultAthleteState(userId);
     await saveAthleteState(userId, athleteState);
+  }
+
+  const todayDateStr = currentDateIST.split("T")[0] || "";
+  if (/(?:skipped|missed|skipping|skip)\s*(?:today|this class|the class|my workout|today's|session)/i.test(userMessage)) {
+    if (!athleteState.events.some((e) => e.date === todayDateStr && e.type === "MISSED_SESSION")) {
+      athleteState.events.push({
+        date: todayDateStr,
+        type: "MISSED_SESSION",
+        severity: "MILD",
+        notes: "Session skipped by athlete request.",
+      });
+      await saveAthleteState(userId, athleteState);
+    }
   }
 
 

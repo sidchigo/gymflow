@@ -1114,7 +1114,18 @@ export function validateAndRepairWeeklyPlan(
   let totalWorkingDays = 0;
   let lastRepairedModality: Modality | null = null;
 
+  // Partial Week Anchor Invariance: If a partial plan (< 7 days) is provided for the current week
+  // and a baseline 7-day plan exists, overlay the partial updates onto the 7-day week so historical
+  // days < N are strictly preserved and the exact 7-day structure is maintained.
+  const isSameWeek = plan.some((p) => existingDays.some((e) => e.date === p.date));
   let fullPlanToProcess = plan;
+  if (isSameWeek && plan.length > 0 && plan.length < 7 && existingDays.length === 7) {
+    fullPlanToProcess = existingDays.map((existingDay) => {
+      if (existingDay.date < todayStr) return existingDay;
+      const update = plan.find((p) => p.date === existingDay.date);
+      return update ? update : existingDay;
+    });
+  }
 
   return fullPlanToProcess.map((dayPlan, idx) => {
     // 1. Lock past days and today's missed/logged sessions from active plan
