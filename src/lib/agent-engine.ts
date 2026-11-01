@@ -489,8 +489,6 @@ export async function runCoachAgent(params: {
     }
   }
 
-
-
   let [weeklyGymStore, currentPlanDoc] = await Promise.all([
     getWeeklyStore(scheduleStoreKey),
     getWeeklyWorkoutPlan(userId, isoWeekId),
@@ -577,7 +575,14 @@ export async function runCoachAgent(params: {
 
   const toolCallsExecuted: AgentResult["toolCallsExecuted"] = [];
 
-
+  const cleanMsg = userMessage.trim().replace(/^(?:so|hey|coach|hi|hello|ok|okay)[,\s]+/i, "");
+  const hasScheduleModificationIntent = /replan|sync|update.*plan|update.*schedule|new.*schedule|new.*plan|generate.*schedule|generate.*plan|change.*workout|swap|switch|replace|cancel|cannot attend|can't attend|not for|youth|skip|missed/i.test(userMessage);
+  const isReadOnlyQuery = /^(what|show|view|tell|list|display|how|is|check|can you show)\b/i.test(cleanMsg) && !hasScheduleModificationIntent;
+  const isReplanning = hasScheduleModificationIntent || (!isReadOnlyQuery && /replan|schedule new|make.*plan/i.test(userMessage));
+  const toolChoice = isReplanning ? {
+    type: "function",
+    function: { name: "replan_week_schedule" }
+  } : undefined;
 
   // Phase 1: Tool Execution Turn (Non-Streaming)
   const completion = await provider.generateCompletion({
@@ -586,7 +591,8 @@ export async function runCoachAgent(params: {
     model,
     temperature: 0.2,
     maxTokens: 8192,
-      });
+    toolChoice,
+  });
 
   if (completion.toolCalls && completion.toolCalls.length > 0) {
     messages.push({
@@ -617,7 +623,17 @@ export async function runCoachAgent(params: {
             }
           }
 
-
+          if (args?.missedDate && typeof args.missedDate === "string") {
+            if (!athleteState.events.some((e) => e.date === args.missedDate && e.type === "MISSED_SESSION")) {
+              athleteState.events.push({
+                date: args.missedDate,
+                type: "MISSED_SESSION",
+                severity: "MILD",
+                notes: "Session skipped by athlete request.",
+              });
+              await saveAthleteState(userId, athleteState);
+            }
+          }
 
             let finalPlan: DailyWorkoutPlan[];
             if (args?.plan && Array.isArray(args.plan) && args.plan.length > 0) {
@@ -826,8 +842,6 @@ export async function runCoachAgentStream(params: {
     }
   }
 
-
-
   let [weeklyGymStore, currentPlanDoc] = await Promise.all([
     getWeeklyStore(scheduleStoreKey),
     getWeeklyWorkoutPlan(userId, isoWeekId),
@@ -914,7 +928,14 @@ export async function runCoachAgentStream(params: {
 
   const toolCallsExecuted: AgentResult["toolCallsExecuted"] = [];
 
-
+  const cleanMsgStream = userMessage.trim().replace(/^(?:so|hey|coach|hi|hello|ok|okay)[,\s]+/i, "");
+  const hasScheduleModificationIntentStream = /replan|sync|update.*plan|update.*schedule|new.*schedule|new.*plan|generate.*schedule|generate.*plan|change.*workout|swap|switch|replace|cancel|cannot attend|can't attend|not for|youth|skip|missed/i.test(userMessage);
+  const isReadOnlyQueryStream = /^(what|show|view|tell|list|display|how|is|check|can you show)\b/i.test(cleanMsgStream) && !hasScheduleModificationIntentStream;
+  const isReplanningStream = hasScheduleModificationIntentStream || (!isReadOnlyQueryStream && /replan|schedule new|make.*plan/i.test(userMessage));
+  const toolChoice = isReplanningStream ? {
+    type: "function",
+    function: { name: "replan_week_schedule" }
+  } : undefined;
 
   // Phase 1: Tool Execution Turn (Streaming & Accumulate)
   if (!provider.generateCompletionStream) {
@@ -927,7 +948,8 @@ export async function runCoachAgentStream(params: {
     model,
     temperature: 0.2,
     maxTokens: 8192, // Increased to 8192 to support reasoning models where reasoning tokens count against the limit
-      };
+    toolChoice,
+  };
 
   const generator = provider.generateCompletionStream(completionParams);
   let toolCalls: Array<{ id?: string; name: string; args: Record<string, unknown> }> = [];
@@ -1009,7 +1031,17 @@ export async function runCoachAgentStream(params: {
               }
             }
 
-
+          if (args?.missedDate && typeof args.missedDate === "string") {
+            if (!athleteState.events.some((e) => e.date === args.missedDate && e.type === "MISSED_SESSION")) {
+              athleteState.events.push({
+                date: args.missedDate,
+                type: "MISSED_SESSION",
+                severity: "MILD",
+                notes: "Session skipped by athlete request.",
+              });
+              await saveAthleteState(userId, athleteState);
+            }
+          }
 
             let finalPlan: DailyWorkoutPlan[];
             if (args?.plan && Array.isArray(args.plan) && args.plan.length > 0) {
