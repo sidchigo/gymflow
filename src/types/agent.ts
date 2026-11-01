@@ -141,6 +141,47 @@ export const AthleteStateSchema = z.object({
 });
 export type AthleteState = z.infer<typeof AthleteStateSchema>;
 
+export function getDefaultAthleteState(userId: string): AthleteState {
+  return {
+    profile: {
+      userId,
+      weightKg: 69.25,
+      heightCm: 169,
+      targetDaysPerWeek: 5,
+      weightUnitPreference: "LBS",
+      mandatoryCombatSessions: { kickboxing: 1, bjj: 1 },
+      weeklyWorkSchedule: {
+        Monday: { mode: "WFH", commuteMinutesOneWay: 30 },
+        Tuesday: { mode: "WFO", commuteMinutesOneWay: 60 },
+        Wednesday: { mode: "WFO", commuteMinutesOneWay: 60 },
+        Thursday: { mode: "WFO", commuteMinutesOneWay: 60 },
+        Friday: { mode: "WFH", commuteMinutesOneWay: 30 },
+        Saturday: { mode: "WFH", commuteMinutesOneWay: 30 },
+        Sunday: { mode: "WFH", commuteMinutesOneWay: 0 },
+      },
+      modalities: [
+        "KICKBOXING",
+        "BJJ",
+        "UPPER_HYPERTROPHY",
+        "LOWER_STRENGTH",
+        "BOXING_CONDITIONING",
+        "KB_CONDITIONING",
+        "MOBILITY_RECOVERY",
+        "REST",
+      ],
+      dietaryPreference: "BALANCED",
+      targetDailyProteinGrams: 125,
+      workDayStartTime: "09:00",
+      workDayEndTime: "18:00",
+      trainingTimePreference: "EVENING",
+      hardStopTrainingTime: "20:00",
+      hardStopWindow: "EVENING",
+    },
+    lifts: [],
+    events: [],
+  };
+}
+
 // ---------------------------------------------------------------------------
 // F. Weekly Workout Plan Schema
 // ---------------------------------------------------------------------------
