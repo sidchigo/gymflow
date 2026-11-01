@@ -5,6 +5,7 @@ import ExerciseCard from "./exercise-card";
 interface DayCardViewProps {
   plan: DailyWorkoutPlan | null;
   athleteState: AthleteState;
+  onSkipToday?: (date: string) => void;
 }
 
 function modalityLabel(plan: DailyWorkoutPlan): string {
@@ -181,8 +182,8 @@ function NutritionCard({ plan }: { plan: DailyWorkoutPlan }) {
               nutrition.post
                 ? nutrition.post
                 : isCombat
-                ? "35g Whey + Electrolytes"
-                : "40g Whey Protein + Casein PM"
+                  ? "35g Whey + Electrolytes"
+                  : "40g Whey Protein + Casein PM"
             )}
           </p>
         </div>
@@ -191,7 +192,7 @@ function NutritionCard({ plan }: { plan: DailyWorkoutPlan }) {
   );
 }
 
-export default function DayCardView({ plan, athleteState }: DayCardViewProps) {
+export default function DayCardView({ plan, athleteState, onSkipToday }: DayCardViewProps) {
   /* ─── Empty State → unified rest card ──────────────────────────────────── */
   if (!plan) {
     return <RestRecoveryCard athleteState={athleteState} />;
@@ -234,9 +235,8 @@ export default function DayCardView({ plan, athleteState }: DayCardViewProps) {
               </span>
             )}
             {workMode && (
-              <span className={`shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full font-bold text-[9px] tracking-wider uppercase ${
-                isWfo ? "bg-white text-zinc-950" : "bg-zinc-800 text-zinc-300"
-              }`}>
+              <span className={`shrink-0 flex items-center gap-1 px-2 py-0.5 rounded-full font-bold text-[9px] tracking-wider uppercase ${isWfo ? "bg-white text-zinc-950" : "bg-zinc-800 text-zinc-300"
+                }`}>
                 {isWfo ? (
                   <>
                     <Briefcase size={9} strokeWidth={2.5} />
@@ -294,6 +294,19 @@ export default function DayCardView({ plan, athleteState }: DayCardViewProps) {
             </div>
           </div>
         </div>
+
+        {onSkipToday && !isRest && (
+          <div className="mt-3.5 pt-3 border-t border-white/[0.06] flex items-center justify-between">
+            <span className="text-[10px] text-zinc-500 font-medium">Unable to attend today?</span>
+            <button
+              type="button"
+              onClick={() => onSkipToday(plan.date)}
+              className="text-[10px] font-semibold tracking-wider uppercase text-zinc-400 hover:text-amber-300 border border-white/10 hover:border-amber-400/30 rounded-lg px-2.5 py-1 bg-white/[0.02] hover:bg-amber-400/[0.06] transition-all cursor-pointer"
+            >
+              Skip Today (Auto-Regulate)
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ─── Rest Day ──────────────────────────────────────────────────── */}

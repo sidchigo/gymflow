@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
-import { getAthleteState, getWeeklyWorkoutPlan } from "@/lib/redis";
-import { getOrSyncWeeklySchedule } from "@/lib/schedule-service";
-import { weekKey } from "@/lib/schedule-service";
+import { getAthleteState, getWeeklyWorkoutPlan, saveWeeklyWorkoutPlan } from "@/lib/redis";
+import { getOrSyncWeeklySchedule, nowISTDateTime, weekKey } from "@/lib/schedule-service";
+import { getPlanningWeekKey, generateDeterministicWeekPlan } from "@/lib/deterministic-planner";
+import { isDemoMode } from "@/lib/adapters";
 import DashboardClient from "./dashboard-client";
 
 interface PageProps {
@@ -27,7 +28,9 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     }
   }
 
-  if (!session) {
+  if (!session && isDemoMode()) {
+    session = { userId: "demo-athlete", role: "MEMBER" };
+  } else if (!session) {
     redirect("/login");
   }
 
@@ -39,10 +42,14 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     redirect("/settings?forceSetup=true");
   }
 
-  // 3. Fetch weekly timetable schedule
+  // 3. Resolve active planning week (IST Monday-Sunday anchor with Sunday rollover)
+  const currentDateIST = nowISTDateTime();
+  const isoWeekId = targetWeek || getPlanningWeekKey(currentDateIST);
+
+  // 4. Fetch weekly timetable schedule
   let scheduleStore = { slots: [], diffs: [], lastFetchedAt: new Date().toISOString() };
   try {
-    const syncResult = await getOrSyncWeeklySchedule(userId, { targetWeekId: targetWeek });
+    const syncResult = await getOrSyncWeeklySchedule(userId, { targetWeekId: isoWeekId });
     scheduleStore = {
       slots: syncResult.store.slots as any,
       diffs: syncResult.store.diffs as any,
@@ -52,12 +59,25 @@ export default async function DashboardPage({ searchParams }: PageProps) {
     console.error(`[dashboard] Failed to sync timetable for userId=${userId}:`, err);
   }
 
-  // 4. Fetch current weekly workout plan
-  const now = new Date();
-  const isoWeekId = targetWeek || weekKey(now);
-  const weeklyPlan = await getWeeklyWorkoutPlan(userId, isoWeekId);
+  // 5. Fetch current weekly workout plan
+  let weeklyPlan = await getWeeklyWorkoutPlan(userId, isoWeekId);
+  if (!weeklyPlan) {
+    const currentIsoWeek = weekKey(new Date());
+    if (currentIsoWeek !== isoWeekId) {
+      weeklyPlan = await getWeeklyWorkoutPlan(userId, currentIsoWeek);
+    }
+  }
 
-  // 5. Render client dashboard
+  if (!weeklyPlan) {
+    weeklyPlan = generateDeterministicWeekPlan({
+      athleteState,
+      weeklyGymStoreSlots: scheduleStore.slots,
+      currentDateIST,
+    });
+    await saveWeeklyWorkoutPlan(userId, isoWeekId, weeklyPlan);
+  }
+
+  // 6. Render client dashboard
   return (
     <DashboardClient
       initialSchedule={scheduleStore}

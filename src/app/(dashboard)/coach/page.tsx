@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
+import { isDemoMode } from "@/lib/adapters";
 import CoachClient from "./coach-client";
 
 interface CoachPageProps {
@@ -23,7 +24,9 @@ export default async function CoachPage({ searchParams }: CoachPageProps) {
     }
   }
 
-  if (!session) {
+  if (!session && isDemoMode()) {
+    session = { userId: "demo-athlete", role: "MEMBER" };
+  } else if (!session) {
     redirect("/login");
   }
 

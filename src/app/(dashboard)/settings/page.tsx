@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { verifySessionToken } from "@/lib/session";
 import { getAthleteState } from "@/lib/redis";
+import { isDemoMode } from "@/lib/adapters";
 import SettingsClient from "./settings-client";
 
 export default async function SettingsPage() {
@@ -17,7 +18,9 @@ export default async function SettingsPage() {
     }
   }
 
-  if (!session) {
+  if (!session && isDemoMode()) {
+    session = { userId: "demo-athlete", role: "MEMBER" };
+  } else if (!session) {
     redirect("/login");
   }
 

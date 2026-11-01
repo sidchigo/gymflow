@@ -86,7 +86,49 @@ export default function DashboardClient({
 }: DashboardClientProps) {
   const router = useRouter();
   const [schedule] = useState<WeeklyScheduleStore>(initialSchedule);
-  const [plan] = useState<WeeklyWorkoutPlan | null>(initialPlan);
+  const [plan, setPlan] = useState<WeeklyWorkoutPlan | null>(() => {
+    if (typeof window !== "undefined" && activeWeek) {
+      try {
+        const stored = window.localStorage.getItem(`gymflow:plan:${activeWeek}`);
+        if (stored) return JSON.parse(stored);
+      } catch { }
+    }
+    return initialPlan;
+  });
+
+  useEffect(() => {
+    if (initialPlan) {
+      setPlan(initialPlan);
+      if (typeof window !== "undefined" && activeWeek) {
+        try {
+          window.localStorage.setItem(`gymflow:plan:${activeWeek}`, JSON.stringify(initialPlan));
+        } catch { }
+      }
+    }
+  }, [initialPlan, activeWeek]);
+
+  const handleSkipToday = async (date: string) => {
+    try {
+      const res = await fetch("/api/schedule/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "skip_day", date, week: activeWeek }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.plan) {
+          setPlan(data.plan);
+          if (typeof window !== "undefined" && activeWeek) {
+            try {
+              window.localStorage.setItem(`gymflow:plan:${activeWeek}`, JSON.stringify(data.plan));
+            } catch { }
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[dashboard] Failed to skip day:", err);
+    }
+  };
 
   const weekNumber = (() => {
     if (activeWeek) {
@@ -274,7 +316,11 @@ export default function DashboardClient({
           onPrevWeek={handlePrevWeek}
           onNextWeek={handleNextWeek}
         />
-        <DayCardView plan={activeDayWorkout} athleteState={athleteState} />
+        <DayCardView
+          plan={activeDayWorkout}
+          athleteState={athleteState}
+          onSkipToday={handleSkipToday}
+        />
       </div>
     </div>
   );
