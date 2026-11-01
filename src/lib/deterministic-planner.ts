@@ -293,9 +293,7 @@ export function findMatchingSlot(
   preference: "MORNING" | "EVENING" | "BOTH" = "BOTH"
 ): NormalizedGymSlot | null {
   const validSlots = slots.filter((slot) => {
-    const slotDateObj = new Date(`${slot.date}T00:00:00+05:30`);
-    const dayOfWeek = slot.dayOfWeek || slotDateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Kolkata" });
-    if (dayOfWeek !== constraints.dayName && slot.date !== date) return false;
+    if (slot.date !== date) return false;
 
     const titleLower = slot.title.toLowerCase();
 

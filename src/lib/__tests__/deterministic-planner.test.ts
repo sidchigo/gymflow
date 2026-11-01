@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   generateDeterministicWeekPlan,
+  validateAndRepairWeeklyPlan,
   getDayConstraints,
+  findMatchingSlot,
 } from "@/lib/deterministic-planner";
 import { type AthleteState } from "@/types/agent";
 import { type NormalizedGymSlot } from "@/types/gym";
@@ -75,6 +77,21 @@ describe("Deterministic Constraint & Plan Solver", () => {
     expect(tueConstraints.eveningWindow.start).toBe("19:05");
   });
 
+  it("filters out slots violating hard stop cutoff on WFO days", () => {
+    const tueConstraints = getDayConstraints("Tuesday", athleteState);
+    // Slot ending at 19:30 + 65m commute = 20:35 > 20:00 hard stop
+    const lateSlot: NormalizedGymSlot = {
+      id: "late_kb",
+      date: "2026-08-25",
+      startTime: "18:30",
+      endTime: "19:30",
+      title: "Kickboxing",
+      trainer: "Coach",
+    };
+    const matched = findMatchingSlot([lateSlot], "2026-08-25", "KICKBOXING", tueConstraints);
+    expect(matched).toBeNull();
+  });
+
   it("generates a 100% compliant 7-day plan with 5 training days and Sunday REST", () => {
     const weekPlan = generateDeterministicWeekPlan({
       athleteState,
@@ -103,5 +120,30 @@ describe("Deterministic Constraint & Plan Solver", () => {
     const benchEx = upperDay?.exercises.find((e) => e.name.includes("Bench"));
     expect(benchEx?.weightKg).toBe(62.5); // +2.5kg over 60kg past lift
     expect(benchEx?.progressionNote).toContain("+2.5 kg");
+  });
+
+  it("validates and repairs illegal plans from rogue LLM generations", () => {
+    const roguePlan = [
+      {
+        date: "2026-08-30",
+        day: "Sunday",
+        focus: "Heavy Deadlifts",
+        modality: "LOWER_STRENGTH" as const,
+        isGymClass: false,
+        plannedTime: "21:30",
+        exercises: [{ name: "Deadlift", sets: 5, reps: "5" }],
+        nutritionAdvice: "Fuel up",
+      },
+    ];
+
+    const repaired = validateAndRepairWeeklyPlan(
+      roguePlan as any,
+      athleteState,
+      "2026-08-24T08:00:00+05:30",
+      null
+    );
+
+    expect(repaired[0]?.modality).toBe("REST");
+    expect(repaired[0]?.exercises).toHaveLength(0);
   });
 });
