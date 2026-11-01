@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "eval": "vitest run src/lib/__tests__/evals.test.ts"
+    "eval": "vitest run src/lib/__tests__/evals.test.ts",
+    "bot:dev": "npx tsx scripts/telegram-polling.ts"
   },
   "dependencies": {
     "@google/genai": "^2.19.0",
