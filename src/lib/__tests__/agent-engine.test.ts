@@ -423,7 +423,7 @@ describe("Coach Agent Engine", () => {
   });
 
   it("filters out gym slots exceeding hard stop training cutoff considering WFO return commute", async () => {
-    const { filterGymSlots } = await import("@/lib/agent-engine");
+    const { filterGymSlotsByCommuteAndPreferences } = await import("@/lib/deterministic-planner");
     const testState: AthleteState = {
       ...initialAthleteState,
       profile: {
@@ -456,7 +456,7 @@ describe("Coach Agent Engine", () => {
       },
     ];
 
-    const filtered = filterGymSlots(slots, testState, "2026-08-28T12:00:00+05:30");
+    const filtered = filterGymSlotsByCommuteAndPreferences(slots, testState, "2026-08-28T12:00:00+05:30");
     expect(filtered).toHaveLength(1);
     expect(filtered[0]?.id).toBe("slot-valid-wfo");
   });

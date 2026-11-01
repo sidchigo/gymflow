@@ -18,7 +18,7 @@ import {
   saveWeeklyStore,
   scheduleWeekKey,
 } from "@/lib/redis";
-import { weekKey, nowIST, nowISTDateTime } from "@/lib/schedule-service";
+import { nowIST, nowISTDateTime, getOrSyncWeeklySchedule } from "@/lib/schedule-service";
 import {
   type LLMMessage,
   type LLMToolDefinition,
@@ -26,14 +26,22 @@ import {
   getDefaultLLMProvider,
 } from "@/lib/llm-provider";
 import {
-  ReplanWeekScheduleArgsSchema,
   LogLiftPerformanceArgsSchema,
   LogAthleteEventArgsSchema,
   type AthleteState,
+  type DailyWorkoutPlan,
   type WeeklyWorkoutPlan,
+  getDefaultAthleteState,
 } from "@/types/agent";
 
 import { safeParseJSON } from "@/lib/json-utils";
+import {
+  generateDeterministicWeekPlan,
+  validateAndRepairWeeklyPlan,
+  filterGymSlotsByCommuteAndPreferences,
+  getPlanningWeekKey,
+  getWeekDaysForDate,
+} from "@/lib/deterministic-planner";
 
 // ---------------------------------------------------------------------------
 // 1. Tool Declarations
@@ -42,13 +50,18 @@ import { safeParseJSON } from "@/lib/json-utils";
 export const replanWeekScheduleTool: LLMToolDefinition = {
   name: "replan_week_schedule",
   description:
-    "Generates or modifies the weekly 7-day athletic workout and recovery plan with progressive overload targets, supersets, and nutrition advice based on available gym classes and athlete profile constraints.",
+    "Invokes the deterministic planner to solve, adjust, or generate the verified weekly 7-day athletic workout and recovery plan. All timetable slot matching, commute buffers, progressive overload, and recovery rules are computed deterministically with 100% precision.",
   parameters: {
     type: "object",
     properties: {
+      reasoning: {
+        type: "string",
+        description:
+          "Clear coaching explanation of why this split was selected given the work schedule, fatigue, and gym timetable.",
+      },
       plan: {
         type: "array",
-        description: "The 7-day plan from Monday through Sunday.",
+        description: "Optional 7-day plan overrides from Monday through Sunday if specific day modifications were requested.",
         items: {
           type: "object",
           properties: {
@@ -167,13 +180,8 @@ export const replanWeekScheduleTool: LLMToolDefinition = {
           ],
         },
       },
-      reasoning: {
-        type: "string",
-        description:
-          "Clear coaching explanation of why this split was selected given the work schedule, fatigue, and gym timetable.",
-      },
     },
-    required: ["plan", "reasoning"],
+    required: ["reasoning"],
   },
 };
 
@@ -239,87 +247,8 @@ export const toolsList = [
 ];
 
 // ---------------------------------------------------------------------------
-// 1b. Helper Functions: Timetable Slot Filter & Raw JSON Fallback
+// 1b. Helper Functions: Raw JSON Fallback
 // ---------------------------------------------------------------------------
-
-export function filterGymSlots(
-  slots: Array<{
-    id: string;
-    date: string;
-    startTime: string;
-    endTime: string;
-    title: string;
-    trainer: string;
-    dayOfWeek?: string | undefined;
-  }>,
-  athleteState: AthleteState,
-  currentDateIST: string
-) {
-  const profile = athleteState.profile;
-  const hardStopTime = profile.hardStopTrainingTime || "20:00";
-  const hardStopWindow = profile.hardStopWindow || "EVENING";
-
-  return slots.filter((s) => {
-    const slotDateTime = `${s.date}T${s.startTime}`;
-    if (slotDateTime < currentDateIST) return false;
-
-    const startHour = s.startTime;
-    const endHour = s.endTime || s.startTime;
-    const pref = profile.trainingTimePreference || "BOTH";
-
-    const slotDateObj = new Date(`${s.date}T00:00:00+05:30`);
-    const dayName =
-      s.dayOfWeek ||
-      slotDateObj.toLocaleDateString("en-US", {
-        weekday: "long",
-        timeZone: "Asia/Kolkata",
-      });
-
-    const isWeekend = dayName === "Saturday" || dayName === "Sunday";
-
-    if (isWeekend) {
-      if (pref === "EVENING" && startHour < "12:00") return false;
-      if (pref === "MORNING" && startHour >= "12:00") return false;
-    } else {
-      const workStart = profile.workDayStartTime || "09:00";
-      if (pref === "EVENING" && startHour < "17:30") return false;
-      if (pref === "MORNING" && startHour >= workStart) return false;
-      if (pref === "BOTH" && startHour >= workStart && startHour < "17:30") return false;
-    }
-
-    const isEveningSlot = startHour >= "12:00";
-    const isMorningSlot = startHour < "12:00";
-
-    const appliesHardStop =
-      hardStopWindow === "BOTH" ||
-      (hardStopWindow === "EVENING" && isEveningSlot) ||
-      (hardStopWindow === "MORNING" && isMorningSlot);
-
-    if (appliesHardStop) {
-      const workSchedule =
-        (profile as any).weeklyWorkSchedule || (profile as any).workSchedule || {};
-      const daySchedule = workSchedule[dayName];
-      const isWFO = daySchedule?.mode === "WFO";
-      const commuteMinutes = isWFO ? (daySchedule?.commuteMinutesOneWay || 0) : 0;
-
-      const timeParts = endHour.split(":").map(Number);
-      const eH = timeParts[0] ?? 0;
-      const eM = timeParts[1] ?? 0;
-      const totalMinutes = eH * 60 + eM + commuteMinutes;
-      const compH = Math.floor(totalMinutes / 60)
-        .toString()
-        .padStart(2, "0");
-      const compM = (totalMinutes % 60).toString().padStart(2, "0");
-      const completionTime = `${compH}:${compM}`;
-
-      if (completionTime > hardStopTime) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-}
 
 async function handleRawJSONFallback(
   rawText: string,
@@ -327,45 +256,44 @@ async function handleRawJSONFallback(
   isoWeekId: string,
   currentPlanDoc: WeeklyWorkoutPlan | null,
   currentDateIST: string,
-  toolCallsExecuted: AgentResult["toolCallsExecuted"]
+  toolCallsExecuted: AgentResult["toolCallsExecuted"],
+  athleteState?: AthleteState,
+  weeklyGymStoreSlots?: any[],
+  userMessage?: string
 ): Promise<{ text: string }> {
-  if (!rawText) return { text: "No response text generated." };
+  if (!rawText && !athleteState) return { text: "No response text generated." };
 
   const jsonBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```|(\{\s*"plan"\s*:\s*\[[\s\S]*?\}\s*)/gi;
   let match: RegExpExecArray | null;
   let interceptedPlan: WeeklyWorkoutPlan | null = null;
-  let cleanText = rawText;
+  let cleanText = (rawText || "")
+    .replace(/<[|｜]?(?:channel|thought|end_thought)[|｜]?>/gi, "")
+    .replace(/<channel[|｜]?>/gi, "")
+    .replace(/<[|｜]?channel>/gi, "")
+    .replace(/<[|｜]?(?:DSML[|｜]?)?tool_calls[\s\S]*?(?:<\/[|｜]?(?:DSML[|｜]?)?tool_calls[|｜]?>|$)/gi, "")
+    .replace(/<[|｜]?tool_call[|｜]?>[\s\S]*?(?:<\/[|｜]?tool_call[|｜]?>|$)/gi, "")
+    .replace(/call:[a-zA-Z0-9_]+\s*\{[\s\S]*?\}/gi, "")
+    .replace(/^thought\b[\s\S]*?(?=(?:call:|\n\n[A-Z]|$))/gi, "")
+    .trim();
 
-  while ((match = jsonBlockRegex.exec(rawText)) !== null) {
+  while ((match = jsonBlockRegex.exec(rawText || "")) !== null) {
     const candidate = (match[1] || match[2] || "").trim();
     try {
       const parsed = safeParseJSON(candidate);
       if (parsed && Array.isArray(parsed.plan)) {
-        const parsedArgs = ReplanWeekScheduleArgsSchema.parse(parsed);
-        const today = currentDateIST.split("T")[0] || "";
-        const existingWeekPlan = currentPlanDoc?.plan || [];
-        const sanitizedPlan = parsedArgs.plan.map((dayPlan) => {
-          let finalDay = dayPlan;
-          if (dayPlan.date < today) {
-            const existingDay = existingWeekPlan.find((p) => p.date === dayPlan.date);
-            finalDay = existingDay || dayPlan;
-          }
-          if (finalDay.isGymClass) {
-            finalDay = {
-              ...finalDay,
-              exercises: (finalDay.exercises || []).map((ex) => ({
-                ...ex,
-                supersetGroupId: null,
-                orderInGroup: null,
-              })),
-            };
-          }
-          return finalDay;
-        });
+        const sanitizedPlan = athleteState
+          ? validateAndRepairWeeklyPlan(
+              parsed.plan,
+              athleteState,
+              currentDateIST,
+              currentPlanDoc,
+              weeklyGymStoreSlots
+            )
+          : parsed.plan;
 
         interceptedPlan = {
           plan: sanitizedPlan,
-          reasoning: parsedArgs.reasoning || "Weekly workout plan updated based on schedule constraints.",
+          reasoning: parsed.reasoning || "Weekly workout plan updated based on schedule constraints.",
           updatedAt: nowIST(),
         };
 
@@ -375,6 +303,17 @@ async function handleRawJSONFallback(
     } catch {
       // Continue searching
     }
+  }
+
+  // If no JSON tool call or block was found, check if planning intent is present
+  const isPlanningIntent = /replan|schedule|workout plan|generate my training|weekly plan|training plan|swap|switch|replace|cancel|cannot attend|can't attend|not for|youth|skip/i.test(userMessage || "");
+  if (!interceptedPlan && athleteState && (isPlanningIntent || !cleanText)) {
+    interceptedPlan = generateDeterministicWeekPlan({
+      athleteState,
+      weeklyGymStoreSlots: weeklyGymStoreSlots || [],
+      currentPlan: currentPlanDoc,
+      currentDateIST,
+    });
   }
 
   if (interceptedPlan) {
@@ -391,12 +330,24 @@ async function handleRawJSONFallback(
       args: { plan: interceptedPlan.plan, reasoning: interceptedPlan.reasoning },
       result: JSON.stringify({
         success: true,
-        message: "Weekly plan successfully updated via fallback parsing.",
+        message: "Weekly plan successfully updated with 100% constraint compliance.",
       }),
     });
 
-    if (!cleanText) {
-      cleanText = interceptedPlan.reasoning || "I have updated your weekly workout plan based on your schedule constraints.";
+    if (interceptedPlan.reasoning && !cleanText) {
+      cleanText = interceptedPlan.reasoning;
+    } else if (!cleanText) {
+      let scheduleSummary = `📅 **Updated 7-Day Athletic Plan (${interceptedPlan.plan[0]?.date || ""} – ${interceptedPlan.plan[interceptedPlan.plan.length - 1]?.date || ""})**\n\n`;
+      for (const day of interceptedPlan.plan) {
+        const icon = day.modality === "REST" ? "🛌" : day.modality === "KICKBOXING" || day.modality === "BJJ" ? "🥊" : "🏋️‍♂️";
+        const timeStr = day.modality !== "REST" ? ` @ ${day.plannedTime}` : "";
+        const classTag = day.isGymClass ? " (Gym Class)" : "";
+        scheduleSummary += `* ${icon} **${day.day}** (${day.date}): **${day.focus}**${timeStr}${classTag}\n`;
+      }
+      if (interceptedPlan.reasoning) {
+        scheduleSummary += `\n**Coach Rationale:** ${interceptedPlan.reasoning}\n`;
+      }
+      cleanText = scheduleSummary;
     }
   }
 
@@ -409,40 +360,35 @@ async function handleRawJSONFallback(
 
 export function buildSystemPrompt(params: {
   athleteState: AthleteState;
-  gymScheduleSlots: string; // pre-formatted compact string
-  gymScheduleDiffs: string; // pre-formatted compact string
+  gymScheduleSlots?: string; // pre-formatted compact string
+  gymScheduleDiffs?: string; // pre-formatted compact string
   currentPlan: string; // pre-formatted current plan
   currentDateIST: string;
   weeklyCalendarAnchor?: string;
 }): string {
   const profile = params.athleteState.profile;
 
-  return `You are GymFlow Coach, an elite MMA & S&C head coach. Be direct, athletic, and actionable. Avoid fluff.
+  return `You are GymFlow Coach, an elite MMA & S&C head coach. All scheduling, timetable matching, commute constraints, and weight progression are handled strictly by the deterministic planner tool. Do not calculate times or invent slots yourself. If a schedule needs modification, formulate the parameters and invoke the planner tool.
 
 GROUND RULES:
-1. Schedule class activities matching valid Gym Timetable slots.
+1. Tool Usage: All scheduling, timetable matching, commute constraints, and weight progression are handled strictly by the deterministic planner tool. When a schedule needs to be created, synced, or replanned (e.g. after a missed workout, gym sync, or user request), call 'replan_week_schedule' directly using native function tool calls with your coaching 'reasoning' (and optional 'missedDate'). The deterministic planner tool will automatically compute the 100% constraint-compliant 7-day plan from verified timetable classes. Do not calculate times or invent slots yourself.
 2. Timetable Sync: If timetable slots list is empty, respond with "unpublished", call tool to build a baseline open strength/conditioning split, and tell user to run 'Sync Gym Schedule' when published.
-3. WFO/WFH Work & Hard Stop Constraint: Work hours are ${profile.workDayStartTime ?? "09:00"}-${profile.workDayEndTime ?? "18:00"}. Never schedule sessions inside work hours. Training preference: ${profile.trainingTimePreference ?? "BOTH"}.
-   - Hard Stop Cutoff: All training sessions must be COMPLETELY finished before ${profile.hardStopTrainingTime ?? "20:00"} (${profile.hardStopWindow ?? "EVENING"} sessions).
-   - WFO Days: Session completion time = Session End Time + Commute Minutes (return commute). Therefore: Session End Time + Commute <= ${profile.hardStopTrainingTime ?? "20:00"}. Earliest start = workEnd + commute.
-   - WFH Days: Session completion time = Session End Time (0 commute). Therefore: Session End Time <= ${profile.hardStopTrainingTime ?? "20:00"}. Earliest start = workEnd.
-   - Morning sessions before (workStart - commute) for WFO, or workStart for WFH.
-   - STRICT CUTOFF: NEVER schedule any session or class whose completion + return commute exceeds ${profile.hardStopTrainingTime ?? "20:00"}. If no gym class fits before cutoff, schedule an open floor session finishing before ${profile.hardStopTrainingTime ?? "20:00"}, or REST.
-4. Tool Usage: Do not modify plan or log lifts/events in plain text. Call 'replan_week_schedule' directly using native function tool calls to update the weekly plan. Max 2 tool steps total.
-5. Saturday can only be morning sessions, only if weekday missed. Sunday is strictly REST.
-6. Replace cancelled combat sessions (BJJ/KB) with KB/Boxing/DUT/TRX conditioning or S&C to maintain the 5-day training goal.
-7. Focus on a brief coaching explanation in the response. Do not render calendar grids or markdown tables.
-8. MODALITY ENUM ENFORCEMENT: The only allowable modalities for activities are: ${(profile.modalities ?? []).join(", ")}. Never use MUAY_THAI, MMA, or any unconfigured modality. Combat sessions MUST strictly be labeled KICKBOXING or BJJ.
-9. PAST DAYS ARE LOCKED: Current date is ${params.currentDateIST.split("T")[0] || ""}. Any schedule days prior to today have already been completed. When calling \`replan_week_schedule\`, copy the exact existing activities from ACTIVE WEEK PLAN for past days without modifying their dates, times, or exercises. Only optimize and adjust days from today onwards.
-10. SCHEDULED GYM CLASSES: When a session is a scheduled gym class (\`isGymClass: true\`), DO NOT pair exercises or assign superset groups (\`supersetGroupId\` must be null). Do NOT prescribe heavy strength/resistance lifting exercises for class sessions. The \`exercises\` array MUST strictly contain ONLY Warmup and Cooldown/Mobility recommendations (e.g. 'Dynamic Warmup', 'Post-Class Static Stretch/Cooldown').
+3. Replace cancelled combat sessions (BJJ/KB) with KB/Boxing conditioning or S&C to maintain the ${profile.targetDaysPerWeek ?? 5}-day training goal.
+4. Focus on a brief coaching explanation in the response. Do not render calendar grids or markdown tables.
+5. MODALITY ENUM ENFORCEMENT: The only allowable modalities for activities are: ${(profile.modalities ?? []).join(", ")}. Never use MUAY_THAI, MMA, or any unconfigured modality. Combat sessions MUST strictly be labeled KICKBOXING or BJJ.
+6. MANDATORY COMBAT CAPS: Exactly ${profile.mandatoryCombatSessions?.kickboxing ?? 1} Kickboxing and ${profile.mandatoryCombatSessions?.bjj ?? 1} BJJ session(s) per week. NEVER schedule extra combat sessions.
+7. PAST DAYS ARE LOCKED: Current date is ${params.currentDateIST.split("T")[0] || ""}. Any schedule days prior to today have already been completed and are locked by the deterministic planner tool.
+8. SCHEDULED GYM CLASSES: All gym class sessions are strictly matched by the deterministic planner tool from verified timetable slots. Do NOT invent gym classes, times, or slots.
+9. REPORTING ACCURACY: 
+   - You may ONLY refer to gym classes listed in VERIFIED AVAILABLE GYM CLASSES. Absolutely NEVER invent, guess, or assume gym classes, days, or times that are not in this list. If no class exists for a modality or day, state that truthfully.
+   - When the user asks about the schedule, you must strictly and accurately reflect the ACTIVE WEEK PLAN without hallucinating conflicting days, extra combat sessions, or illegal times.
+   - SUNDAY IS STRICTLY REST: Absolutely NEVER suggest, schedule, or move workouts to Sunday.
 
-PERIODIZATION & SAFETY RULES:
-1. Lock 2 combat slots (Kickboxing, BJJ) first from verified timetable slots.
-2. Energy allocation: WFH = high demand (Heavy compounds, sparring); WFO = shorter/dense (TRX, boxing conditioning, antagonistic supersets e.g. Push+Pull) or REST.
-3. Progressions: Compound lifts: linear load (+2.5kg/+5lbs) when RPE target is met. Accessories: double progression. Specify numeric targetWeight (estimate 15-20% body weight baseline if no history).
-4. Auto-Regulation: Illness/fever/pain reports require REST/mobility recovery. Convert current and next day (min 48h rest) to REST/MOBILITY_RECOVERY.
-5. No heavy compounds within 12h before or immediately after high-intensity combat sparring. RPE <= 7.5 on S&C after sparring.
-6. Nutrition: Training days = 40-60g pre-workout carbs (90-120m prior), electrolytes, 35-40g post-workout protein. Rest days = baseline protein (4x30g meals).
+PERIODIZATION & COACHING GUIDELINES:
+1. Energy allocation: WFH = high demand (Heavy compounds, sparring); WFO = shorter/dense (boxing conditioning, antagonistic supersets e.g. Push+Pull) or REST.
+2. Progressions: Compound lifts: linear load (+2.5kg/+5lbs) when RPE target is met. Accessories: double progression.
+3. Auto-Regulation: Illness/fever/pain/missed session reports require REST/mobility recovery or compensatory conditioning. Convert current and next day (min 48h rest) to REST/MOBILITY_RECOVERY when sick.
+4. Nutrition: Training days = 40-60g pre-workout carbs (90-120m prior), electrolytes, 35-40g post-workout protein. Rest days = baseline protein (4x30g meals).
 
 CURRENT DATE/TIME IST: ${params.currentDateIST}
 
@@ -453,6 +399,7 @@ ${params.weeklyCalendarAnchor}
 - Weight: ${profile.weightKg ?? 70} kg. Preference: ${(profile as any).weightUnitPreference ?? (profile as any).unitPreference ?? "KG"}
 - Height: ${profile.heightCm ?? 170} cm. Target Days/Week: ${profile.targetDaysPerWeek ?? 5}
 - Mandatory Combat: Kickboxing: ${profile.mandatoryCombatSessions?.kickboxing ?? 0}/wk, BJJ: ${profile.mandatoryCombatSessions?.bjj ?? 0}/wk
+- Active Modalities: ${(profile.modalities ?? []).join(", ")}
 - Diet: ${profile.dietaryPreference ?? "BALANCED"}. Protein Target: ${profile.targetDailyProteinGrams ?? 125}g
 - Work: ${profile.workDayStartTime ?? "09:00"}-${profile.workDayEndTime ?? "18:00"}. Preference: ${profile.trainingTimePreference ?? "BOTH"}
 - Hard Stop Cutoff: ${profile.hardStopTrainingTime ?? "20:00"} (Window: ${profile.hardStopWindow ?? "EVENING"})
@@ -463,13 +410,13 @@ ${(params.athleteState.lifts || []).slice(-3).map((l) => `* ${l.date} - ${l.exer
 
 ATHLETE EVENTS (Last 2):
 ${(params.athleteState.events || []).slice(-2).map((e) => `* ${e.date} [${e.type}] Severity: ${e.severity}. Details: ${e.notes}`).join("\n")}
-
-GYM TIMETABLE SLOTS:
+${params.gymScheduleSlots ? `
+VERIFIED AVAILABLE GYM CLASSES:
 ${params.gymScheduleSlots}
-
+` : ""}${params.gymScheduleDiffs ? `
 GYM TIMETABLE DIFF ALERTS:
 ${params.gymScheduleDiffs}
-
+` : ""}
 ACTIVE WEEK PLAN:
 ${params.currentPlan}
 
@@ -482,26 +429,14 @@ INSTRUCTIONS:
 // 3. Execution & Orchestration Loop
 // ---------------------------------------------------------------------------
 
-function buildWeeklyCalendarAnchor(currentDateIST: string): string {
-  // currentDateIST is "YYYY-MM-DDTHH:mm" in IST offset
-  const todayDateStr = currentDateIST.split("T")[0] || "2026-09-01";
-  const [y, m, d] = todayDateStr.split("-").map(Number) as [number, number, number];
-  const todayObj = new Date(Date.UTC(y, m - 1, d));
-  const dayNum = todayObj.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-  const mondayOffset = dayNum === 0 ? -6 : 1 - dayNum;
-
-  const daysOfWeek = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-  const anchorLines: string[] = [];
-
-  for (let i = 0; i < 7; i++) {
-    const targetDate = new Date(Date.UTC(y, m - 1, d + mondayOffset + i));
-    const isoDate = targetDate.toISOString().split("T")[0];
-    const dayName = daysOfWeek[i];
-    const isToday = isoDate === todayDateStr;
-    anchorLines.push(`  * ${dayName}: ${isoDate}${isToday ? " [TODAY]" : ""}`);
-  }
-
-  return anchorLines.join("\n");
+function buildWeeklyCalendarAnchor(currentDateIST: string, options?: { isNextWeek?: boolean }): string {
+  const weekDays = getWeekDaysForDate(currentDateIST, options);
+  return weekDays
+    .map(
+      (day) =>
+        `  * ${day.dayName}: ${day.date}${day.isToday ? " [TODAY]" : ""}${day.isPast ? " [PAST]" : ""}`
+    )
+    .join("\n");
 }
 
 export interface AgentResult {
@@ -523,21 +458,47 @@ export async function runCoachAgent(params: {
   const { userId, userMessage, chatHistory = [], model } = params;
   const provider = params.provider || getDefaultLLMProvider();
 
-  // 1. Resolve current week and dates
-  const now = new Date();
-  const isoWeekId = weekKey(now);
+  // 1. Resolve current planning week and dates (accounting for Sunday or next week request)
   const currentDateIST = nowISTDateTime();
+  const isNextWeek = /next\s*week|upcoming\s*week|next\s*7\s*days/i.test(userMessage);
+  const isoWeekId = getPlanningWeekKey(currentDateIST, { isNextWeek });
 
   // 2. Fetch state in parallel from Redis
   const scheduleStoreKey = scheduleWeekKey(isoWeekId);
-  const athleteState = await getAthleteState(userId);
+  let athleteState = await getAthleteState(userId);
+  if (!athleteState) {
+    athleteState = getDefaultAthleteState(userId);
+    await saveAthleteState(userId, athleteState);
+  }
+
+
+
   let [weeklyGymStore, currentPlanDoc] = await Promise.all([
     getWeeklyStore(scheduleStoreKey),
     getWeeklyWorkoutPlan(userId, isoWeekId),
   ]);
 
-  if (!athleteState) {
-    throw new Error(`Athlete profile/state not found for user: ${userId}`);
+  if (!weeklyGymStore || /sync/i.test(userMessage)) {
+    try {
+      const syncResult = await getOrSyncWeeklySchedule(userId, {
+        forceRefresh: /sync/i.test(userMessage),
+        targetWeekId: isoWeekId,
+      });
+      weeklyGymStore = syncResult.store;
+    } catch {
+      // Best-effort sync
+    }
+  }
+
+  // Ensure an active baseline plan exists in Redis if unpopulated
+  if (!currentPlanDoc) {
+    currentPlanDoc = generateDeterministicWeekPlan({
+      athleteState,
+      weeklyGymStoreSlots: weeklyGymStore?.slots || [],
+      currentDateIST,
+      isNextWeek,
+    });
+    await saveWeeklyWorkoutPlan(userId, isoWeekId, currentPlanDoc);
   }
 
   // 3. Set up message queue
@@ -548,7 +509,7 @@ export async function runCoachAgent(params: {
   ];
 
   // Filter gym timetable slots using helper (training window & hard stop cutoff)
-  const filteredSlots = filterGymSlots(weeklyGymStore?.slots || [], athleteState, currentDateIST);
+  const filteredSlots = filterGymSlotsByCommuteAndPreferences(weeklyGymStore?.slots || [], athleteState, currentDateIST);
 
   const slotsText =
     filteredSlots.length > 0
@@ -558,14 +519,14 @@ export async function runCoachAgent(params: {
             return `  * Slot [${s.id}] - ${dayOfWeek} ${s.date} (${s.startTime}-${s.endTime}): ${s.title} by ${s.trainer}`;
           })
           .join("\n")
-      : "  (No scheduled classes found)";
+      : "  (No scheduled classes found matching constraints)";
 
   const diffsText =
     weeklyGymStore?.diffs && weeklyGymStore.diffs.length > 0
       ? weeklyGymStore.diffs
           .map((d) => `  * [${d.type}] Slot [${d.slotId}] - ${d.title} on ${d.date} original time: ${d.originalTime}`)
           .join("\n")
-      : "  (No class changes/cancellations detected)";
+      : "";
 
   const currentPlanText = currentPlanDoc
     ? currentPlanDoc.plan
@@ -583,7 +544,7 @@ export async function runCoachAgent(params: {
         .join("\n")
     : "  (No active weekly plan found)";
 
-  const weeklyCalendarAnchor = buildWeeklyCalendarAnchor(currentDateIST);
+  const weeklyCalendarAnchor = buildWeeklyCalendarAnchor(currentDateIST, { isNextWeek });
 
   const systemPrompt = buildSystemPrompt({
     athleteState,
@@ -598,6 +559,8 @@ export async function runCoachAgent(params: {
 
   const toolCallsExecuted: AgentResult["toolCallsExecuted"] = [];
 
+
+
   // Phase 1: Tool Execution Turn (Non-Streaming)
   const completion = await provider.generateCompletion({
     messages,
@@ -605,7 +568,7 @@ export async function runCoachAgent(params: {
     model,
     temperature: 0.2,
     maxTokens: 8192,
-  });
+      });
 
   if (completion.toolCalls && completion.toolCalls.length > 0) {
     messages.push({
@@ -625,7 +588,7 @@ export async function runCoachAgent(params: {
       try {
         if (call.name === "replan_week_schedule") {
           let args = call.args;
-          if (typeof args.plan === "string") {
+          if (typeof args?.plan === "string") {
             try {
               args = {
                 ...args,
@@ -635,32 +598,42 @@ export async function runCoachAgent(params: {
               console.error("Failed to parse double-stringified plan in runCoachAgent:", e);
             }
           }
-          const parsedArgs = ReplanWeekScheduleArgsSchema.parse(args);
-          const today = currentDateIST.split("T")[0] || "";
-          const existingWeekPlan = currentPlanDoc?.plan || [];
-          const sanitizedPlan = parsedArgs.plan.map((dayPlan) => {
-            let finalDay = dayPlan;
-            if (dayPlan.date < today) {
-              const existingDay = existingWeekPlan.find((p) => p.date === dayPlan.date);
-              finalDay = existingDay || dayPlan;
+
+
+
+            let finalPlan: DailyWorkoutPlan[];
+            if (args?.plan && Array.isArray(args.plan) && args.plan.length > 0) {
+              finalPlan = validateAndRepairWeeklyPlan(
+                args.plan,
+                athleteState,
+                currentDateIST,
+                currentPlanDoc,
+                weeklyGymStore?.slots || []
+              );
+            } else {
+              const solvedPlanDoc = generateDeterministicWeekPlan({
+                athleteState,
+                weeklyGymStoreSlots: weeklyGymStore?.slots || [],
+                diffs: weeklyGymStore?.diffs,
+                currentPlan: currentPlanDoc,
+                currentDateIST,
+                isNextWeek,
+              });
+              finalPlan = solvedPlanDoc.plan;
             }
-            if (finalDay.isGymClass) {
-              finalDay = {
-                ...finalDay,
-                exercises: (finalDay.exercises || []).map((ex) => ({
-                  ...ex,
-                  supersetGroupId: null,
-                  orderInGroup: null,
-                })),
-              };
-            }
-            return finalDay;
-          });
-          const fullPlan: WeeklyWorkoutPlan = {
-            plan: sanitizedPlan,
-            reasoning: parsedArgs.reasoning,
-            updatedAt: nowIST(),
-          };
+
+            const reasoning = typeof args?.reasoning === "string" && args.reasoning.trim()
+              ? args.reasoning
+              : "Weekly workout plan updated based on schedule constraints.";
+
+            const fullPlan: WeeklyWorkoutPlan = {
+              plan: finalPlan,
+              reasoning,
+              updatedAt: nowIST(),
+            };
+
+          call.args = { plan: fullPlan.plan, reasoning: fullPlan.reasoning };
+
           await saveWeeklyWorkoutPlan(userId, isoWeekId, fullPlan);
           currentPlanDoc = fullPlan;
 
@@ -672,9 +645,15 @@ export async function runCoachAgent(params: {
             weeklyGymStore = store;
           }
 
+          const scheduleSummary = fullPlan.plan
+            .map((d) => `${d.day} (${d.date}): ${d.focus} @ ${d.plannedTime} [${d.modality}] (Class: ${d.isGymClass})`)
+            .join("; ");
+
           executionResult = JSON.stringify({
             success: true,
-            message: "Weekly plan successfully generated/updated and saved to Redis.",
+            lockedSchedule: scheduleSummary,
+            plan: fullPlan.plan,
+            message: "Weekly plan successfully verified by deterministic planner and locked to Redis.",
           });
         } else if (call.name === "log_lift_performance") {
           const args = LogLiftPerformanceArgsSchema.parse(call.args);
@@ -744,8 +723,25 @@ export async function runCoachAgent(params: {
       model,
     });
 
+    let returnText = followUp.text || "";
+    if (!returnText.trim()) {
+      if (currentPlanDoc) {
+        let scheduleSummary = `📅 **Updated 7-Day Athletic Plan (${currentPlanDoc.plan[0]?.date || ""} – ${currentPlanDoc.plan[currentPlanDoc.plan.length - 1]?.date || ""})**\n\n`;
+        for (const day of currentPlanDoc.plan) {
+          const icon = day.modality === "REST" ? "🛌" : day.modality === "KICKBOXING" || day.modality === "BJJ" ? "🥊" : "🏋️‍♂️";
+          const timeStr = day.modality !== "REST" ? ` @ ${day.plannedTime}` : "";
+          const classTag = day.isGymClass ? " (Gym Class)" : "";
+          scheduleSummary += `* ${icon} **${day.day}** (${day.date}): **${day.focus}**${timeStr}${classTag}\n`;
+        }
+        if (currentPlanDoc.reasoning) {
+          scheduleSummary += `\n**Coach Rationale:** ${currentPlanDoc.reasoning}\n`;
+        }
+        returnText = scheduleSummary;
+      }
+    }
+
     return {
-      text: followUp.text || "No response text generated.",
+      text: returnText || "Your weekly schedule has been updated.",
       toolCallsExecuted,
     };
   } else {
@@ -755,7 +751,10 @@ export async function runCoachAgent(params: {
       isoWeekId,
       currentPlanDoc,
       currentDateIST,
-      toolCallsExecuted
+      toolCallsExecuted,
+      athleteState,
+      weeklyGymStore?.slots,
+      userMessage
     );
     return {
       text: fallbackResult.text || "No response text generated.",
@@ -783,21 +782,47 @@ export async function runCoachAgentStream(params: {
   const { userId, userMessage, chatHistory = [], model, controller, onToken, onEvent } = params;
   const provider = params.provider || getDefaultLLMProvider();
 
-  // 1. Resolve current week and dates
-  const now = new Date();
-  const isoWeekId = weekKey(now);
+  // 1. Resolve current planning week and dates (accounting for Sunday or next week request)
   const currentDateIST = nowISTDateTime();
+  const isNextWeek = /next\s*week|upcoming\s*week|next\s*7\s*days/i.test(userMessage);
+  const isoWeekId = getPlanningWeekKey(currentDateIST, { isNextWeek });
 
   // 2. Fetch state in parallel from Redis
   const scheduleStoreKey = scheduleWeekKey(isoWeekId);
-  const athleteState = await getAthleteState(userId);
+  let athleteState = await getAthleteState(userId);
+  if (!athleteState) {
+    athleteState = getDefaultAthleteState(userId);
+    await saveAthleteState(userId, athleteState);
+  }
+
+
+
   let [weeklyGymStore, currentPlanDoc] = await Promise.all([
     getWeeklyStore(scheduleStoreKey),
     getWeeklyWorkoutPlan(userId, isoWeekId),
   ]);
 
-  if (!athleteState) {
-    throw new Error(`Athlete profile/state not found for user: ${userId}`);
+  if (!weeklyGymStore || /sync/i.test(userMessage)) {
+    try {
+      const syncResult = await getOrSyncWeeklySchedule(userId, {
+        forceRefresh: /sync/i.test(userMessage),
+        targetWeekId: isoWeekId,
+      });
+      weeklyGymStore = syncResult.store;
+    } catch {
+      // Best-effort sync
+    }
+  }
+
+  // Ensure an active baseline plan exists in Redis if unpopulated
+  if (!currentPlanDoc) {
+    currentPlanDoc = generateDeterministicWeekPlan({
+      athleteState,
+      weeklyGymStoreSlots: weeklyGymStore?.slots || [],
+      currentDateIST,
+      isNextWeek,
+    });
+    await saveWeeklyWorkoutPlan(userId, isoWeekId, currentPlanDoc);
   }
 
   // 3. Set up message queue
@@ -808,7 +833,7 @@ export async function runCoachAgentStream(params: {
   ];
 
   // Filter gym timetable slots using helper (training window & hard stop cutoff)
-  const filteredSlots = filterGymSlots(weeklyGymStore?.slots || [], athleteState, currentDateIST);
+  const filteredSlots = filterGymSlotsByCommuteAndPreferences(weeklyGymStore?.slots || [], athleteState, currentDateIST);
 
   const slotsText =
     filteredSlots.length > 0
@@ -818,14 +843,14 @@ export async function runCoachAgentStream(params: {
             return `  * Slot [${s.id}] - ${dayOfWeek} ${s.date} (${s.startTime}-${s.endTime}): ${s.title} by ${s.trainer}`;
           })
           .join("\n")
-      : "  (No scheduled classes found)";
+      : "  (No scheduled classes found matching constraints)";
 
   const diffsText =
     weeklyGymStore?.diffs && weeklyGymStore.diffs.length > 0
       ? weeklyGymStore.diffs
           .map((d) => `  * [${d.type}] Slot [${d.slotId}] - ${d.title} on ${d.date} original time: ${d.originalTime}`)
           .join("\n")
-      : "  (No class changes/cancellations detected)";
+      : "";
 
   const currentPlanText = currentPlanDoc
     ? currentPlanDoc.plan
@@ -843,7 +868,7 @@ export async function runCoachAgentStream(params: {
         .join("\n")
     : "  (No active weekly plan found)";
 
-  const weeklyCalendarAnchor = buildWeeklyCalendarAnchor(currentDateIST);
+  const weeklyCalendarAnchor = buildWeeklyCalendarAnchor(currentDateIST, { isNextWeek });
 
   const systemPrompt = buildSystemPrompt({
     athleteState,
@@ -858,11 +883,7 @@ export async function runCoachAgentStream(params: {
 
   const toolCallsExecuted: AgentResult["toolCallsExecuted"] = [];
 
-  const isReplanning = /replan|schedule|change|update|swap|calendar|class|cancel|sync|workout plan|generate/i.test(userMessage);
-  const toolChoice = isReplanning ? {
-    type: "function",
-    function: { name: "replan_week_schedule" }
-  } : undefined;
+
 
   // Phase 1: Tool Execution Turn (Streaming & Accumulate)
   if (!provider.generateCompletionStream) {
@@ -875,8 +896,7 @@ export async function runCoachAgentStream(params: {
     model,
     temperature: 0.2,
     maxTokens: 8192, // Increased to 8192 to support reasoning models where reasoning tokens count against the limit
-    toolChoice,
-  };
+      };
 
   const generator = provider.generateCompletionStream(completionParams);
   let toolCalls: Array<{ id?: string; name: string; args: Record<string, unknown> }> = [];
@@ -885,29 +905,37 @@ export async function runCoachAgentStream(params: {
   for await (const chunk of generator) {
     if (chunk.text) {
       directText += chunk.text;
-      if (onToken) {
-        onToken(chunk.text);
-      }
-      onEvent({ type: "text", text: chunk.text });
     }
     if (chunk.toolCalls && chunk.toolCalls.length > 0) {
       toolCalls.push(...chunk.toolCalls);
     }
   }
 
+  // If no tool calls were made, stream the direct text response
+  if (toolCalls.length === 0) {
+    if (directText) {
+      if (onToken) {
+        onToken(directText);
+      }
+      onEvent({ type: "text", text: directText });
+    }
+  }
+
   if (toolCalls.length > 0) {
     messages.push({
       role: "model",
-      parts: toolCalls.map((tc) => ({
+      parts: toolCalls.map((tc, idx) => ({
         functionCall: {
           name: tc.name,
           args: tc.args,
+          id: tc.id || `call_0_${idx}`,
         },
       })),
     });
 
-    for (const call of toolCalls) {
-      const id = call.id || `call_fallback_${call.name}`;
+    for (let callIndex = 0; callIndex < toolCalls.length; callIndex++) {
+      const call = toolCalls[callIndex]!;
+      const id = call.id || `call_0_${callIndex}`;
       if (controller) {
         const statusMsg = call.name === 'replan_week_schedule' 
           ? 'Updating your 7-day training schedule...' 
@@ -939,7 +967,7 @@ export async function runCoachAgentStream(params: {
         const executeToolPromise = async () => {
           if (call.name === "replan_week_schedule") {
             let args = call.args;
-            if (typeof args.plan === "string") {
+            if (typeof args?.plan === "string") {
               try {
                 args = {
                   ...args,
@@ -949,32 +977,42 @@ export async function runCoachAgentStream(params: {
                 console.error("Failed to parse double-stringified plan in runCoachAgentStream:", e);
               }
             }
-            const parsedArgs = ReplanWeekScheduleArgsSchema.parse(args);
-            const today = currentDateIST.split("T")[0] || "";
-            const existingWeekPlan = currentPlanDoc?.plan || [];
-            const sanitizedPlan = parsedArgs.plan.map((dayPlan) => {
-              let finalDay = dayPlan;
-              if (dayPlan.date < today) {
-                const existingDay = existingWeekPlan.find((p) => p.date === dayPlan.date);
-                finalDay = existingDay || dayPlan;
-              }
-              if (finalDay.isGymClass) {
-                finalDay = {
-                  ...finalDay,
-                  exercises: (finalDay.exercises || []).map((ex) => ({
-                    ...ex,
-                    supersetGroupId: null,
-                    orderInGroup: null,
-                  })),
-                };
-              }
-              return finalDay;
-            });
+
+
+
+            let finalPlan: DailyWorkoutPlan[];
+            if (args?.plan && Array.isArray(args.plan) && args.plan.length > 0) {
+              finalPlan = validateAndRepairWeeklyPlan(
+                args.plan,
+                athleteState,
+                currentDateIST,
+                currentPlanDoc,
+                weeklyGymStore?.slots || []
+              );
+            } else {
+              const solvedPlanDoc = generateDeterministicWeekPlan({
+                athleteState,
+                weeklyGymStoreSlots: weeklyGymStore?.slots || [],
+                diffs: weeklyGymStore?.diffs,
+                currentPlan: currentPlanDoc,
+                currentDateIST,
+                isNextWeek,
+              });
+              finalPlan = solvedPlanDoc.plan;
+            }
+
+            const reasoning = typeof args?.reasoning === "string" && args.reasoning.trim()
+              ? args.reasoning
+              : "Weekly workout plan updated based on schedule constraints.";
+
             const fullPlan: WeeklyWorkoutPlan = {
-              plan: sanitizedPlan,
-              reasoning: parsedArgs.reasoning,
+              plan: finalPlan,
+              reasoning,
               updatedAt: nowIST(),
             };
+
+            call.args = { plan: fullPlan.plan, reasoning: fullPlan.reasoning };
+
             await saveWeeklyWorkoutPlan(userId, isoWeekId, fullPlan);
             currentPlanDoc = fullPlan;
 
@@ -986,9 +1024,15 @@ export async function runCoachAgentStream(params: {
               weeklyGymStore = store;
             }
 
+            const scheduleSummary = fullPlan.plan
+              .map((d) => `${d.day} (${d.date}): ${d.focus} @ ${d.plannedTime} [${d.modality}] (Class: ${d.isGymClass})`)
+              .join("; ");
+
             return JSON.stringify({
               success: true,
-              message: "Weekly plan successfully generated/updated and saved to Redis.",
+              lockedSchedule: scheduleSummary,
+              plan: fullPlan.plan,
+              message: "Weekly plan successfully validated and locked to Redis.",
             });
           } else if (call.name === "log_lift_performance") {
             const args = LogLiftPerformanceArgsSchema.parse(call.args);
@@ -1083,6 +1127,25 @@ export async function runCoachAgentStream(params: {
       }
     }
 
+    if (!rationaleText.trim()) {
+      if (currentPlanDoc) {
+        let scheduleSummary = `📅 **Updated 7-Day Athletic Plan (${currentPlanDoc.plan[0]?.date || ""} – ${currentPlanDoc.plan[currentPlanDoc.plan.length - 1]?.date || ""})**\n\n`;
+        for (const day of currentPlanDoc.plan) {
+          const icon = day.modality === "REST" ? "🛌" : day.modality === "KICKBOXING" || day.modality === "BJJ" ? "🥊" : "🏋️‍♂️";
+          const timeStr = day.modality !== "REST" ? ` @ ${day.plannedTime}` : "";
+          const classTag = day.isGymClass ? " (Gym Class)" : "";
+          scheduleSummary += `* ${icon} **${day.day}** (${day.date}): **${day.focus}**${timeStr}${classTag}\n`;
+        }
+        if (currentPlanDoc.reasoning) {
+          scheduleSummary += `\n**Coach Rationale:** ${currentPlanDoc.reasoning}\n`;
+        }
+        if (onToken) {
+          onToken(scheduleSummary);
+        }
+        rationaleText = scheduleSummary;
+      }
+    }
+
     return {
       text: rationaleText,
       toolCallsExecuted,
@@ -1094,7 +1157,10 @@ export async function runCoachAgentStream(params: {
       isoWeekId,
       currentPlanDoc,
       currentDateIST,
-      toolCallsExecuted
+      toolCallsExecuted,
+      athleteState,
+      weeklyGymStore?.slots,
+      userMessage
     );
     return {
       text: fallbackResult.text || "No response text generated.",
