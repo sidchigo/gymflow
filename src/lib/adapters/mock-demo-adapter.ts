@@ -1,6 +1,6 @@
 /**
  * @file src/lib/adapters/mock-demo-adapter.ts
- * @description In-memory, self-contained mock demo adapter for recruiter sandbox.
+ * @description In-memory, self-contained mock demo adapter for demo sandbox.
  * Backed by synthetic fixtures (BJJ, Kickboxing, Open Gym) and pre-seeded athlete state.
  */
 

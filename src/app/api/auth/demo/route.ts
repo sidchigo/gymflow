@@ -1,6 +1,6 @@
 /**
  * @file src/app/api/auth/demo/route.ts
- * @description Instant 1-click recruiter sandbox authentication for public demo mode.
+ * @description Instant 1-click sandbox authentication for public demo mode.
  */
 
 import { NextResponse } from "next/server";

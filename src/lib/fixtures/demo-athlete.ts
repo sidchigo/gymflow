@@ -1,6 +1,6 @@
 /**
  * @file src/lib/fixtures/demo-athlete.ts
- * @description Pre-seeded athlete state fixture for recruiter demo sandbox.
+ * @description Pre-seeded athlete state fixture for demo sandbox.
  * Contains sample past workouts, active fatigue markers, and 5-day hybrid target.
  */
 

@@ -164,14 +164,14 @@ export default function Login() {
         )}
 
         <div className="mt-6 pt-6 border-t border-zinc-800 text-center">
-          <p className="text-xs text-zinc-400 mb-3">Recruiter / Portfolio Review?</p>
+          <p className="text-xs text-zinc-400 mb-3">Want to explore without signing in?</p>
           <button
             type="button"
             onClick={handleLaunchDemo}
             disabled={loading}
             className="w-full rounded-lg border border-purple-500/40 bg-purple-950/30 hover:bg-purple-900/40 py-2.5 px-4 font-semibold text-purple-200 transition-all text-sm flex items-center justify-center gap-2 cursor-pointer"
           >
-            🚀 Launch Recruiter Demo Sandbox
+            ⚡ Enter Demo Sandbox
           </button>
         </div>
       </div>
