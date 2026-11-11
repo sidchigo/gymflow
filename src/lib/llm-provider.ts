@@ -88,6 +88,32 @@ function sanitizeGeminiModel(name?: string): string {
   return name;
 }
 
+async function retryWithBackoff<T>(fn: () => Promise<T>, maxRetries = 2, baseDelayMs = 1200): Promise<T> {
+  let lastError: any;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastError = err;
+      const msg = String(err?.message || err || "");
+      const isTransient =
+        err?.status === 503 ||
+        err?.status === 429 ||
+        msg.includes("503") ||
+        msg.includes("429") ||
+        msg.includes("UNAVAILABLE") ||
+        msg.includes("high demand") ||
+        msg.includes("RESOURCE_EXHAUSTED");
+      if (!isTransient || attempt === maxRetries) {
+        throw err;
+      }
+      const delay = baseDelayMs * Math.pow(2, attempt);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw lastError;
+}
+
 export class GeminiLLMProvider implements LLMProvider {
   private ai: GoogleGenAI;
   private defaultModel: string;
@@ -206,11 +232,13 @@ export class GeminiLLMProvider implements LLMProvider {
       configObj.maxOutputTokens = params.maxTokens;
     }
 
-    const response = await this.ai.models.generateContent({
-      model: modelName,
-      contents,
-      config: configObj,
-    });
+    const response = await retryWithBackoff(() =>
+      this.ai.models.generateContent({
+        model: modelName,
+        contents,
+        config: configObj,
+      })
+    );
 
     // 5. Build standard response format
     const text = response.text || undefined;
@@ -328,11 +356,13 @@ export class GeminiLLMProvider implements LLMProvider {
       configObj.maxOutputTokens = params.maxTokens;
     }
 
-    const responseStream = await this.ai.models.generateContentStream({
-      model: modelName,
-      contents,
-      config: configObj,
-    });
+    const responseStream = await retryWithBackoff(() =>
+      this.ai.models.generateContentStream({
+        model: modelName,
+        contents,
+        config: configObj,
+      })
+    );
 
     for await (const chunk of responseStream) {
       const text = chunk.text || undefined;
