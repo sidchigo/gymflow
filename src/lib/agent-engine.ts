@@ -637,7 +637,10 @@ export async function runCoachAgent(params: {
           }
 
             let finalPlan: DailyWorkoutPlan[];
-            if (args?.plan && Array.isArray(args.plan) && args.plan.length > 0) {
+            let finalReasoning: string;
+            const isFullScheduleSync = /sync|generate.*schedule|generate.*plan|new.*schedule|weekly.*plan/i.test(userMessage);
+
+            if (!isFullScheduleSync && args?.plan && Array.isArray(args.plan) && args.plan.length > 0) {
               finalPlan = validateAndRepairWeeklyPlan(
                 args.plan,
                 athleteState,
@@ -645,6 +648,9 @@ export async function runCoachAgent(params: {
                 currentPlanDoc,
                 weeklyGymStore?.slots || []
               );
+              finalReasoning = typeof args?.reasoning === "string" && args.reasoning.trim()
+                ? args.reasoning
+                : "Weekly workout plan updated based on schedule constraints.";
             } else {
               const solvedPlanDoc = generateDeterministicWeekPlan({
                 athleteState,
@@ -655,15 +661,12 @@ export async function runCoachAgent(params: {
                 isNextWeek,
               });
               finalPlan = solvedPlanDoc.plan;
+              finalReasoning = solvedPlanDoc.reasoning;
             }
-
-            const reasoning = typeof args?.reasoning === "string" && args.reasoning.trim()
-              ? args.reasoning
-              : "Weekly workout plan updated based on schedule constraints.";
 
             const fullPlan: WeeklyWorkoutPlan = {
               plan: finalPlan,
-              reasoning,
+              reasoning: finalReasoning,
               updatedAt: nowIST(),
             };
 
@@ -1045,7 +1048,10 @@ export async function runCoachAgentStream(params: {
           }
 
             let finalPlan: DailyWorkoutPlan[];
-            if (args?.plan && Array.isArray(args.plan) && args.plan.length > 0) {
+            let finalReasoning: string;
+            const isFullScheduleSync = /sync|generate.*schedule|generate.*plan|new.*schedule|weekly.*plan/i.test(userMessage);
+
+            if (!isFullScheduleSync && args?.plan && Array.isArray(args.plan) && args.plan.length > 0) {
               finalPlan = validateAndRepairWeeklyPlan(
                 args.plan,
                 athleteState,
@@ -1053,6 +1059,9 @@ export async function runCoachAgentStream(params: {
                 currentPlanDoc,
                 weeklyGymStore?.slots || []
               );
+              finalReasoning = typeof args?.reasoning === "string" && args.reasoning.trim()
+                ? args.reasoning
+                : "Weekly workout plan updated based on schedule constraints.";
             } else {
               const solvedPlanDoc = generateDeterministicWeekPlan({
                 athleteState,
@@ -1063,15 +1072,12 @@ export async function runCoachAgentStream(params: {
                 isNextWeek,
               });
               finalPlan = solvedPlanDoc.plan;
+              finalReasoning = solvedPlanDoc.reasoning;
             }
-
-            const reasoning = typeof args?.reasoning === "string" && args.reasoning.trim()
-              ? args.reasoning
-              : "Weekly workout plan updated based on schedule constraints.";
 
             const fullPlan: WeeklyWorkoutPlan = {
               plan: finalPlan,
-              reasoning,
+              reasoning: finalReasoning,
               updatedAt: nowIST(),
             };
 

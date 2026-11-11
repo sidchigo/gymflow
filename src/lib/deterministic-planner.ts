@@ -968,9 +968,10 @@ export function generateDeterministicWeekPlan(params: {
     }
 
     // Program S&C based on WFH vs WFO with balanced non-consecutive split
-    const plannedTime = constraints.isWFO
-      ? constraints.eveningWindow.start
-      : "18:30";
+    const preferMorning = profile.trainingTimePreference === "MORNING" || profile.hardStopWindow === "MORNING";
+    const plannedTime = preferMorning && constraints.morningWindow.isValid
+      ? constraints.morningWindow.start
+      : (constraints.isWFO ? constraints.eveningWindow.start : "18:30");
 
     let modality: Modality = "UPPER_HYPERTROPHY";
     let focusTitle = "";
@@ -1257,9 +1258,16 @@ export function validateAndRepairWeeklyPlan(
         } else if (allowedModalities.has("KB_CONDITIONING")) {
           sanitized.modality = "KB_CONDITIONING";
           sanitized.focus = "Full Body Power & Kettlebell Conditioning";
-        } else {
+        } else if (allowedModalities.has("BOXING_CONDITIONING")) {
           sanitized.modality = "BOXING_CONDITIONING";
           sanitized.focus = "Boxing Conditioning & Core Work";
+        } else {
+          sanitized.modality = allowedModalities.has("UPPER_HYPERTROPHY")
+            ? "UPPER_HYPERTROPHY"
+            : (allowedModalities.has("LOWER_STRENGTH") ? "LOWER_STRENGTH" : "REST");
+          sanitized.focus = sanitized.modality === "REST"
+            ? "Rest & Tissue Quality"
+            : (sanitized.modality === "UPPER_HYPERTROPHY" ? "Upper Heavy Compounds & Core Stability" : "Lower Strength & Posterior Chain Power");
         }
         sanitized.exercises = generateExercisesForModality(sanitized.modality, false, dayConstraints.isWFO, athleteState);
       }
@@ -1380,7 +1388,12 @@ export function validateAndRepairWeeklyPlan(
     }
 
     // 9. Work Mode Timing Alignment (WFO commute & WFH working hours)
-    if (dayConstraints.isWFO && sanitized.modality !== "REST") {
+    const preferMorningInRepair = profile.trainingTimePreference === "MORNING" || profile.hardStopWindow === "MORNING";
+    if (preferMorningInRepair && sanitized.modality !== "REST" && sanitized.day !== "Saturday" && sanitized.day !== "Sunday" && !sanitized.isGymClass) {
+      if (dayConstraints.morningWindow.isValid) {
+        sanitized.plannedTime = dayConstraints.morningWindow.start;
+      }
+    } else if (dayConstraints.isWFO && sanitized.modality !== "REST") {
       const currentStartMins = parseTimeToMinutes(sanitized.plannedTime);
       const workEndMins = parseTimeToMinutes(profile.workDayEndTime || "18:00");
       const minEveningStart = workEndMins + dayConstraints.commuteMinutes;
