@@ -10,9 +10,42 @@ export default function Login() {
   const [step, setStep] = useState<"email" | "otp">("email");
   const [loading, setLoading] = useState(false);
   const [showOtpFallback, setShowOtpFallback] = useState(false);
+  const [showTokenImport, setShowTokenImport] = useState(false);
+  const [importToken, setImportToken] = useState("");
   const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  const handleImportSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = importToken.trim();
+    if (!token) return;
+
+    setLoading(true);
+    setError(null);
+    setInfoMessage(null);
+
+    try {
+      const res = await fetch("/api/auth/session-import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+
+      if (!res.ok) {
+        const errData = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(errData?.error || "Failed to import active gym session.");
+      }
+
+      router.push("/");
+      router.refresh();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to import session.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Handles Email submission: checks if Passkey/Windows Hello is available, otherwise sends OTP
   const handleContinue = async (e: React.FormEvent) => {
@@ -229,6 +262,47 @@ export default function Login() {
               >
                 Login with OTP Instead
               </button>
+            )}
+
+            <div className="pt-2 text-center">
+              <button
+                type="button"
+                onClick={() => setShowTokenImport(!showTokenImport)}
+                className="text-[11px] font-mono text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
+              >
+                {showTokenImport ? "Hide Session Import" : "⚡ Gym OTP Down? Import Active Gym Session"}
+              </button>
+            </div>
+
+            {showTokenImport && (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-4 space-y-3 text-left">
+                <p className="text-[11px] text-zinc-400 leading-relaxed">
+                  If you are already logged in to <span className="text-zinc-200 font-mono">gymwebapp.thecooperfitness.com</span> with Windows Hello, run this in your browser console on the gym tab to copy your token:
+                </p>
+                <div className="rounded bg-black/60 p-2 font-mono text-[10px] text-emerald-400 select-all border border-zinc-800 break-all">
+                  copy(localStorage.getItem(&apos;access_token&apos;))
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-semibold uppercase text-zinc-500">
+                    Paste Access Token
+                  </label>
+                  <input
+                    type="password"
+                    value={importToken}
+                    onChange={(e) => setImportToken(e.target.value)}
+                    placeholder="eyJhbGciOi..."
+                    className="w-full rounded-md border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs font-mono text-zinc-200 outline-none focus:border-indigo-500"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleImportSession}
+                  disabled={loading || !importToken.trim()}
+                  className="w-full rounded-md bg-indigo-600 hover:bg-indigo-500 py-2 text-xs font-bold text-white transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  {loading ? "Connecting..." : "Connect Active Session"}
+                </button>
+              </div>
             )}
           </form>
         ) : (
