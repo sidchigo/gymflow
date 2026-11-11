@@ -1,15 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { Fingerprint } from "lucide-react";
+import { isBiometricsSupported, authenticateWithBiometrics } from "@/lib/webauthn-client";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"email" | "otp">("email");
   const [loading, setLoading] = useState(false);
+  const [biometricsAvailable, setBiometricsAvailable] = useState(false);
+  const [biometricsLoading, setBiometricsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    let isMounted = true;
+    void isBiometricsSupported().then((supported) => {
+      if (isMounted) setBiometricsAvailable(supported);
+    });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleBiometricLogin = async () => {
+    setBiometricsLoading(true);
+    setError(null);
+    try {
+      const res = await authenticateWithBiometrics();
+      if (res.ok) {
+        router.push("/");
+        router.refresh();
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Biometric login failed";
+      if (!msg.toLowerCase().includes("cancel")) {
+        setError(msg);
+      }
+    } finally {
+      setBiometricsLoading(false);
+    }
+  };
 
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,6 +131,29 @@ export default function Login() {
         {error && (
           <div className="mb-6 rounded-lg border border-red-500/30 bg-red-950/40 p-4 text-sm text-red-300">
             {error === "INVALID_OTP" ? "Invalid verification code. Try again." : error}
+          </div>
+        )}
+
+        {step === "email" && biometricsAvailable && (
+          <div className="mb-6">
+            <button
+              type="button"
+              onClick={handleBiometricLogin}
+              disabled={loading || biometricsLoading}
+              className="w-full flex items-center justify-center gap-2 rounded-lg border border-indigo-500/40 bg-indigo-950/40 hover:bg-indigo-900/40 py-3 px-4 font-semibold text-indigo-200 transition-all text-sm active:scale-98 cursor-pointer disabled:opacity-50 shadow-lg shadow-indigo-950/20"
+            >
+              <Fingerprint className="w-5 h-5 text-indigo-400" />
+              {biometricsLoading ? "Verifying Biometrics..." : "Sign in with Face ID / Touch ID"}
+            </button>
+
+            <div className="relative my-6 flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-zinc-800" />
+              </div>
+              <div className="relative bg-zinc-900 px-3 text-[11px] font-mono uppercase tracking-wider text-zinc-500">
+                Or continue with Email OTP
+              </div>
+            </div>
           </div>
         )}
 

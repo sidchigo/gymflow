@@ -24,6 +24,10 @@ import {
   type AthleteState,
   type WeeklyWorkoutPlan,
 } from "@/types/agent";
+import {
+  StoredPasskeyCredentialSchema,
+  type StoredPasskeyCredential,
+} from "@/types/webauthn";
 
 import { isDemoMode, getAdapter } from "@/lib/adapters";
 
@@ -286,6 +290,92 @@ export async function getUserIdByTelegramChat(chatId: string | number): Promise<
 
 export async function getTelegramChatByUserId(userId: string): Promise<string | null> {
   return getRedis().get<string>(`telegram:user:${userId}:chat`);
+}
+
+// ---------------------------------------------------------------------------
+// WebAuthn Passkey Credentials Helpers
+// ---------------------------------------------------------------------------
+
+export const WEBAUTHN_CHALLENGE_TTL = 300; // 5 minutes
+
+export async function storeWebAuthnChallenge(
+  key: string,
+  challenge: string,
+  ttlSeconds = WEBAUTHN_CHALLENGE_TTL
+): Promise<void> {
+  await getRedis().set(`webauthn:challenge:${key}`, challenge, { ex: ttlSeconds });
+}
+
+export async function getAndClearWebAuthnChallenge(key: string): Promise<string | null> {
+  const redisKey = `webauthn:challenge:${key}`;
+  const challenge = await getRedis().get<string>(redisKey);
+  if (challenge) {
+    await getRedis().del(redisKey);
+  }
+  return challenge;
+}
+
+export async function savePasskeyCredential(
+  credential: StoredPasskeyCredential
+): Promise<void> {
+  const credKey = `passkey:credential:${credential.credentialId}`;
+  await getRedis().set(credKey, credential);
+
+  const userPasskeysKey = `user:${credential.userId}:passkeys`;
+  const existingIds = (await getRedis().get<string[]>(userPasskeysKey)) || [];
+  if (!existingIds.includes(credential.credentialId)) {
+    existingIds.push(credential.credentialId);
+    await getRedis().set(userPasskeysKey, existingIds);
+  }
+}
+
+export async function getPasskeyCredential(
+  credentialId: string
+): Promise<StoredPasskeyCredential | null> {
+  const credKey = `passkey:credential:${credentialId}`;
+  const raw = await getRedis().get<unknown>(credKey);
+  if (!raw) return null;
+  const parsed = StoredPasskeyCredentialSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
+export async function getUserPasskeys(
+  userId: string
+): Promise<StoredPasskeyCredential[]> {
+  const userPasskeysKey = `user:${userId}:passkeys`;
+  const credentialIds = (await getRedis().get<string[]>(userPasskeysKey)) || [];
+  const credentials: StoredPasskeyCredential[] = [];
+
+  for (const id of credentialIds) {
+    const cred = await getPasskeyCredential(id);
+    if (cred) {
+      credentials.push(cred);
+    }
+  }
+
+  return credentials;
+}
+
+export async function deletePasskeyCredential(
+  userId: string,
+  credentialId: string
+): Promise<void> {
+  const credKey = `passkey:credential:${credentialId}`;
+  await getRedis().del(credKey);
+
+  const userPasskeysKey = `user:${userId}:passkeys`;
+  const existingIds = (await getRedis().get<string[]>(userPasskeysKey)) || [];
+  const updatedIds = existingIds.filter((id) => id !== credentialId);
+  await getRedis().set(userPasskeysKey, updatedIds);
+}
+
+export async function deleteUserPasskeys(userId: string): Promise<void> {
+  const userPasskeysKey = `user:${userId}:passkeys`;
+  const existingIds = (await getRedis().get<string[]>(userPasskeysKey)) || [];
+  for (const id of existingIds) {
+    await getRedis().del(`passkey:credential:${id}`);
+  }
+  await getRedis().del(userPasskeysKey);
 }
 
 

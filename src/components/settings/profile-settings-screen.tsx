@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Save, Clock, LogOut, User, Apple, Swords, Calendar, Dumbbell, Smartphone, Download } from "lucide-react";
+import { Save, Clock, LogOut, User, Apple, Swords, Calendar, Dumbbell, Smartphone, Download, Fingerprint, ShieldCheck } from "lucide-react";
+import { isBiometricsSupported, registerBiometrics } from "@/lib/webauthn-client";
 import {
   type AthleteProfile,
   type Modality,
@@ -134,6 +135,69 @@ export default function ProfileSettingsScreen({
   const [installPromptEvent, setInstallPromptEvent] = useState<any>(null);
   const [isIOS, setIsIOS] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
+
+  // Biometrics (WebAuthn / Passkeys)
+  const [biometricsSupported, setBiometricsSupported] = useState(false);
+  const [biometricsEnrolled, setBiometricsEnrolled] = useState(false);
+  const [biometricsLoading, setBiometricsLoading] = useState(false);
+  const [biometricsStatusMsg, setBiometricsStatusMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    void isBiometricsSupported().then((supported) => {
+      if (isMounted) setBiometricsSupported(supported);
+    });
+
+    void fetch("/api/auth/webauthn/status")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { enrolled?: boolean } | null) => {
+        if (isMounted && data) {
+          setBiometricsEnrolled(Boolean(data.enrolled));
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleRegisterBiometrics = async () => {
+    setBiometricsLoading(true);
+    setBiometricsStatusMsg(null);
+    try {
+      await registerBiometrics();
+      setBiometricsEnrolled(true);
+      setBiometricsStatusMsg("Biometrics registered successfully!");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to register biometrics";
+      setBiometricsStatusMsg(msg);
+    } finally {
+      setBiometricsLoading(false);
+    }
+  };
+
+  const handleRemoveBiometrics = async () => {
+    setBiometricsLoading(true);
+    setBiometricsStatusMsg(null);
+    try {
+      const res = await fetch("/api/auth/webauthn/credentials", { method: "DELETE" });
+      if (res.ok) {
+        setBiometricsEnrolled(false);
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("gymflow_biometrics_enrolled");
+        }
+        setBiometricsStatusMsg("Biometrics removed.");
+      } else {
+        throw new Error("Failed to remove credentials");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to remove biometrics";
+      setBiometricsStatusMsg(msg);
+    } finally {
+      setBiometricsLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -706,6 +770,62 @@ export default function ProfileSettingsScreen({
                 </div>
                   );
                 })}
+              </div>
+            </section>
+
+            {/* ── Security & Biometrics ─────────────────────────────── */}
+            <section className="rounded-xl border border-zinc-900 bg-zinc-950/40 p-3.5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Fingerprint size={12} strokeWidth={2.5} className="text-zinc-550" />
+                  <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-500 font-bold">
+                    Security & Biometric Access
+                  </span>
+                </div>
+                {biometricsEnrolled ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-mono font-bold text-emerald-400">
+                    <ShieldCheck size={10} strokeWidth={2.5} />
+                    Active
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-full bg-zinc-900 border border-zinc-800 px-2 py-0.5 text-[9px] font-mono font-medium text-zinc-500">
+                    Not Enrolled
+                  </span>
+                )}
+              </div>
+
+              <p className="text-[11px] leading-relaxed text-zinc-400">
+                Log into GymFlow with 1-click Face ID, Touch ID, or Windows Hello on this device without waiting for email OTP codes.
+              </p>
+
+              {biometricsStatusMsg && (
+                <div className={`p-2.5 rounded-lg text-xs font-mono ${biometricsEnrolled ? "bg-emerald-950/40 border border-emerald-500/30 text-emerald-300" : "bg-zinc-900 text-zinc-300 border border-zinc-800"}`}>
+                  {biometricsStatusMsg}
+                </div>
+              )}
+
+              <div className="pt-1">
+                {biometricsEnrolled ? (
+                  <button
+                    type="button"
+                    onClick={handleRemoveBiometrics}
+                    disabled={biometricsLoading}
+                    className="w-full flex items-center justify-center gap-2 rounded-lg border border-red-900/40 bg-red-950/20 hover:bg-red-950/40 py-2.5 px-3 text-xs font-semibold text-red-300 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Fingerprint size={14} />
+                    {biometricsLoading ? "Removing..." : "Remove Biometric Passkey"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleRegisterBiometrics}
+                    disabled={biometricsLoading || !biometricsSupported}
+                    className="w-full flex items-center justify-center gap-2 rounded-lg border border-indigo-500/40 bg-indigo-950/30 hover:bg-indigo-900/40 py-2.5 px-3 text-xs font-semibold text-indigo-200 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Fingerprint size={14} />
+                    {biometricsLoading ? "Enrolling Biometrics..." : biometricsSupported ? "Enable Face ID / Touch ID" : "Biometrics Unsupported on this Device"}
+                  </button>
+                )}
               </div>
             </section>
           </div>
