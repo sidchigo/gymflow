@@ -813,14 +813,22 @@ export function generateDeterministicWeekPlan(params: {
 
     if (isPast || hasTodayMissedOrCompleted) {
       if (existingDay) {
-        full7DayPlan.push(existingDay);
-        if (existingDay.modality !== "REST" && !existingDay.focus.toLowerCase().includes("missed")) {
+        const pastDay = { ...existingDay };
+        const preferMorning = profile.trainingTimePreference === "MORNING" || profile.hardStopWindow === "MORNING";
+        if (preferMorning && !pastDay.isGymClass && pastDay.modality !== "REST") {
+          const pastConstraints = getDayConstraints(dayName, athleteState);
+          if (pastConstraints.morningWindow.isValid) {
+            pastDay.plannedTime = pastConstraints.morningWindow.start;
+          }
+        }
+        full7DayPlan.push(pastDay);
+        if (pastDay.modality !== "REST" && !pastDay.focus.toLowerCase().includes("missed")) {
           totalTrainingDays++;
-          lastModality = existingDay.modality;
-          if (existingDay.modality === "KICKBOXING") scheduledKB++;
-          if (existingDay.modality === "BJJ") scheduledBJJ++;
-          if (existingDay.modality === "UPPER_HYPERTROPHY") scheduledUpper++;
-          if (existingDay.modality === "LOWER_STRENGTH") scheduledLower++;
+          lastModality = pastDay.modality;
+          if (pastDay.modality === "KICKBOXING") scheduledKB++;
+          if (pastDay.modality === "BJJ") scheduledBJJ++;
+          if (pastDay.modality === "UPPER_HYPERTROPHY") scheduledUpper++;
+          if (pastDay.modality === "LOWER_STRENGTH") scheduledLower++;
         }
         continue;
       }
@@ -872,19 +880,39 @@ export function generateDeterministicWeekPlan(params: {
     // Modality Collision Prevention: Do not schedule Kickboxing immediately after heavy upper push
     const canScheduleKickboxing = lastModality !== "UPPER_HYPERTROPHY";
 
-    if (allowedModalities.has("KICKBOXING") && scheduledKB < targetKickboxing && canScheduleKickboxing) {
-      matchedSlot = findMatchingSlot(availableSlots, date, "KICKBOXING", constraints, userPref);
-      if (matchedSlot) {
-        selectedModality = "KICKBOXING";
-        scheduledKB++;
-      }
-    }
+    const bjjDeficit = targetBjj - scheduledBJJ;
+    const kbDeficit = targetKickboxing - scheduledKB;
+    const prioritizeBJJ = bjjDeficit > kbDeficit;
 
-    if (!matchedSlot && allowedModalities.has("BJJ") && scheduledBJJ < targetBjj) {
-      matchedSlot = findMatchingSlot(availableSlots, date, "BJJ", constraints, userPref);
-      if (matchedSlot) {
-        selectedModality = "BJJ";
-        scheduledBJJ++;
+    if (prioritizeBJJ) {
+      if (allowedModalities.has("BJJ") && scheduledBJJ < targetBjj) {
+        matchedSlot = findMatchingSlot(availableSlots, date, "BJJ", constraints, userPref);
+        if (matchedSlot) {
+          selectedModality = "BJJ";
+          scheduledBJJ++;
+        }
+      }
+      if (!matchedSlot && allowedModalities.has("KICKBOXING") && scheduledKB < targetKickboxing && canScheduleKickboxing) {
+        matchedSlot = findMatchingSlot(availableSlots, date, "KICKBOXING", constraints, userPref);
+        if (matchedSlot) {
+          selectedModality = "KICKBOXING";
+          scheduledKB++;
+        }
+      }
+    } else {
+      if (allowedModalities.has("KICKBOXING") && scheduledKB < targetKickboxing && canScheduleKickboxing) {
+        matchedSlot = findMatchingSlot(availableSlots, date, "KICKBOXING", constraints, userPref);
+        if (matchedSlot) {
+          selectedModality = "KICKBOXING";
+          scheduledKB++;
+        }
+      }
+      if (!matchedSlot && allowedModalities.has("BJJ") && scheduledBJJ < targetBjj) {
+        matchedSlot = findMatchingSlot(availableSlots, date, "BJJ", constraints, userPref);
+        if (matchedSlot) {
+          selectedModality = "BJJ";
+          scheduledBJJ++;
+        }
       }
     }
 
@@ -1020,8 +1048,8 @@ export function generateDeterministicWeekPlan(params: {
         focusTitle = "Mobility & Active Recovery";
       }
     } else if (lastModality === "LOWER_STRENGTH") {
-      // Must not be Lower Strength. Also avoid Upper Hypertrophy if tomorrow is Kickboxing.
-      if (!tomorrowHasKickboxing && allowedModalities.has("UPPER_HYPERTROPHY")) {
+      // Must not be Lower Strength. Prefer Upper Hypertrophy if enabled.
+      if (allowedModalities.has("UPPER_HYPERTROPHY")) {
         modality = "UPPER_HYPERTROPHY";
         focusTitle = constraints.isWFO
           ? "Upper Body Hypertrophy (Time-Dense Supersets)"
@@ -1030,9 +1058,12 @@ export function generateDeterministicWeekPlan(params: {
       } else if (allowedModalities.has("KB_CONDITIONING")) {
         modality = "KB_CONDITIONING";
         focusTitle = "Full Body Power & Kettlebell Conditioning";
-      } else {
+      } else if (allowedModalities.has("BOXING_CONDITIONING")) {
         modality = "BOXING_CONDITIONING";
         focusTitle = "Boxing Conditioning & Core Work";
+      } else {
+        modality = "MOBILITY_RECOVERY";
+        focusTitle = "Mobility & Active Recovery";
       }
     } else {
       // Prioritize balancing Upper vs Lower across the week, respecting tomorrow's recovery window
