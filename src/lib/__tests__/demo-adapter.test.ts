@@ -103,7 +103,7 @@ describe("Decoupled Provider/Adapter & Demo Sandbox Suite", () => {
   describe("3. In-Memory State & Mutation Persistence", () => {
     it("returns pre-seeded athlete state and persists mutations purely in memory", async () => {
       const demoAdapter = new MockDemoAdapter();
-      const userId = "test-sandbox-user";
+      const userId = "test-recruiter";
 
       const initial = await demoAdapter.getAthleteState(userId);
       expect(initial).not.toBeNull();
@@ -126,7 +126,7 @@ describe("Decoupled Provider/Adapter & Demo Sandbox Suite", () => {
 
     it("generates deterministic weekly workout plan on first fetch and persists mutations", async () => {
       const demoAdapter = new MockDemoAdapter();
-      const userId = "test-sandbox-plan";
+      const userId = "test-recruiter-plan";
       const weekId = "2026_W35";
 
       const generatedPlan = await demoAdapter.getWeeklyWorkoutPlan(userId, weekId);
@@ -162,7 +162,7 @@ describe("Decoupled Provider/Adapter & Demo Sandbox Suite", () => {
 
     it("isolates gym Bearer tokens in-memory without external Redis writes", async () => {
       const demoAdapter = new MockDemoAdapter();
-      const userId = "sandbox-token-user";
+      const userId = "recruiter-token-user";
 
       await demoAdapter.storeGymToken(userId, "sandbox-bearer-token-12345");
       const token = await demoAdapter.getGymToken(userId);
