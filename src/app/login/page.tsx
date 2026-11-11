@@ -1,75 +1,128 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Fingerprint } from "lucide-react";
-import { isBiometricsSupported, authenticateWithBiometrics } from "@/lib/webauthn-client";
+import { getPasskeyAssertion, type PasskeyPublicKeyOptions } from "@/lib/webauthn-client";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"email" | "otp">("email");
   const [loading, setLoading] = useState(false);
-  const [biometricsAvailable, setBiometricsAvailable] = useState(false);
-  const [biometricsLoading, setBiometricsLoading] = useState(false);
+  const [showOtpFallback, setShowOtpFallback] = useState(false);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    let isMounted = true;
-    void isBiometricsSupported().then((supported) => {
-      if (isMounted) setBiometricsAvailable(supported);
-    });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  const handleBiometricLogin = async () => {
-    setBiometricsLoading(true);
-    setError(null);
-    try {
-      const res = await authenticateWithBiometrics();
-      if (res.ok) {
-        router.push("/");
-        router.refresh();
-      }
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Biometric login failed";
-      if (!msg.toLowerCase().includes("cancel")) {
-        setError(msg);
-      }
-    } finally {
-      setBiometricsLoading(false);
-    }
-  };
-
-  const handleSendOtp = async (e: React.FormEvent) => {
+  // Handles Email submission: checks if Passkey/Windows Hello is available, otherwise sends OTP
+  const handleContinue = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) return;
+
     setLoading(true);
     setError(null);
+    setInfoMessage(null);
+    setShowOtpFallback(false);
 
     try {
-      const res = await fetch("/api/auth/send-otp", {
+      // 1. Check passkey availability
+      const res = await fetch(`/api/auth/passkey/login-options?email=${encodeURIComponent(cleanEmail)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to send OTP");
+        const errData = (await res.json().catch(() => null)) as { error?: string; detail?: string } | null;
+        throw new Error(errData?.detail || errData?.error || "Failed to check login options.");
       }
 
+      const data = (await res.json()) as {
+        passkey_available: boolean;
+        publicKey?: PasskeyPublicKeyOptions;
+        otpSent?: boolean;
+        message?: string;
+      };
+
+      // 2. If passkey is available on this email, prompt Windows Hello / Biometric PIN
+      if (data.passkey_available && data.publicKey) {
+        setInfoMessage("Prompting Windows Hello / Biometric sign-in...");
+        try {
+          const credential = await getPasskeyAssertion(data.publicKey);
+
+          // Verify with passkey verify route
+          const verifyRes = await fetch("/api/auth/passkey/login-verify", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: cleanEmail, credential }),
+          });
+
+          if (!verifyRes.ok) {
+            const errData = (await verifyRes.json().catch(() => null)) as { error?: string } | null;
+            throw new Error(errData?.error || "Passkey verification failed.");
+          }
+
+          // Verified!
+          router.push("/");
+          router.refresh();
+          return;
+        } catch (passkeyErr: unknown) {
+          const msg = passkeyErr instanceof Error ? passkeyErr.message : "Passkey not completed.";
+          setShowOtpFallback(true);
+          setError(
+            msg.toLowerCase().includes("cancel")
+              ? "Passkey authentication was cancelled. You can sign in with OTP instead."
+              : `${msg} You can use OTP to continue.`
+          );
+          setInfoMessage(null);
+          return;
+        }
+      }
+
+      // 3. Passkey not available -> OTP was triggered automatically
       setStep("otp");
-    } catch (err: any) {
-      setError(err.message || "Failed to send OTP. Please try again.");
+      setInfoMessage("OTP sent. Check your email for the verification code.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Network error. Please try again.";
+      setError(msg);
+      setShowOtpFallback(true);
     } finally {
       setLoading(false);
     }
   };
 
+  // Explicit OTP request fallback
+  const handleRequestOtpInstead = async () => {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) return;
+
+    setLoading(true);
+    setError(null);
+    setInfoMessage(null);
+
+    try {
+      const res = await fetch("/api/auth/send-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string };
+        throw new Error(data.error || "Failed to send OTP");
+      }
+
+      setStep("otp");
+      setInfoMessage("Verification code sent to your email.");
+      setShowOtpFallback(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to send OTP. Please try again.";
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Verify OTP submission
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!otp) return;
@@ -80,19 +133,20 @@ export default function Login() {
       const res = await fetch("/api/auth/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp }),
+        body: JSON.stringify({ email: email.trim().toLowerCase(), otp }),
       });
 
       if (!res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as { error?: string };
         throw new Error(data.error || "Invalid OTP");
       }
 
       // Successful verification
       router.push("/");
       router.refresh();
-    } catch (err: any) {
-      setError(err.message || "Failed to verify OTP. Please try again.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to verify OTP. Please try again.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -109,8 +163,9 @@ export default function Login() {
       } else {
         throw new Error("Failed to enter demo mode");
       }
-    } catch (err: any) {
-      setError(err.message || "Failed to launch demo sandbox.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to launch demo sandbox.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -134,31 +189,14 @@ export default function Login() {
           </div>
         )}
 
-        {step === "email" && biometricsAvailable && (
-          <div className="mb-6">
-            <button
-              type="button"
-              onClick={handleBiometricLogin}
-              disabled={loading || biometricsLoading}
-              className="w-full flex items-center justify-center gap-2 rounded-lg border border-indigo-500/40 bg-indigo-950/40 hover:bg-indigo-900/40 py-3 px-4 font-semibold text-indigo-200 transition-all text-sm active:scale-98 cursor-pointer disabled:opacity-50 shadow-lg shadow-indigo-950/20"
-            >
-              <Fingerprint className="w-5 h-5 text-indigo-400" />
-              {biometricsLoading ? "Verifying Biometrics..." : "Sign in with Face ID / Touch ID"}
-            </button>
-
-            <div className="relative my-6 flex items-center justify-center">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-zinc-800" />
-              </div>
-              <div className="relative bg-zinc-900 px-3 text-[11px] font-mono uppercase tracking-wider text-zinc-500">
-                Or continue with Email OTP
-              </div>
-            </div>
+        {infoMessage && (
+          <div className="mb-6 rounded-lg border border-indigo-500/30 bg-indigo-950/40 p-3.5 text-xs text-indigo-200">
+            {infoMessage}
           </div>
         )}
 
         {step === "email" ? (
-          <form onSubmit={handleSendOtp} className="space-y-6">
+          <form onSubmit={handleContinue} className="space-y-4">
             <div>
               <label htmlFor="email" className="block text-xs font-semibold uppercase tracking-wider text-zinc-400">
                 Email Address
@@ -169,7 +207,7 @@ export default function Login() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="athlete@gymflow.com"
+                placeholder="athlete@example.com"
                 className="mt-2 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-zinc-200 outline-none transition-all placeholder:text-zinc-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               />
             </div>
@@ -177,10 +215,21 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-zinc-100 py-3 font-bold text-zinc-950 transition-all hover:bg-zinc-200 active:scale-98 disabled:opacity-50"
+              className="w-full rounded-lg bg-zinc-100 py-3 font-bold text-zinc-950 transition-all hover:bg-zinc-200 active:scale-98 disabled:opacity-50 cursor-pointer shadow-md"
             >
-              {loading ? "Requesting OTP..." : "Get Access Code"}
+              {loading ? "Checking..." : "Continue"}
             </button>
+
+            {showOtpFallback && (
+              <button
+                type="button"
+                onClick={handleRequestOtpInstead}
+                disabled={loading}
+                className="w-full rounded-lg border border-zinc-800 bg-zinc-950/80 hover:bg-zinc-800 py-2.5 px-4 font-semibold text-zinc-300 text-sm transition-all cursor-pointer"
+              >
+                Login with OTP Instead
+              </button>
+            )}
           </form>
         ) : (
           <form onSubmit={handleVerifyOtp} className="space-y-6">
@@ -191,7 +240,11 @@ export default function Login() {
                 </label>
                 <button
                   type="button"
-                  onClick={() => setStep("email")}
+                  onClick={() => {
+                    setStep("email");
+                    setInfoMessage(null);
+                    setError(null);
+                  }}
                   className="text-xs font-semibold text-indigo-400 hover:text-indigo-300"
                 >
                   Change Email
@@ -205,14 +258,14 @@ export default function Login() {
                 value={otp}
                 onChange={(e) => setOtp(e.target.value)}
                 placeholder="123456"
-                className="mt-2 w-full text-center tracking-widest font-mono rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-zinc-200 outline-none transition-all placeholder:text-zinc-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                className="mt-2 w-full text-center tracking-widest font-mono rounded-lg border border-zinc-800 bg-zinc-950 px-4 py-3 text-zinc-200 outline-none transition-all placeholder:text-zinc-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 text-lg"
               />
             </div>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-lg bg-indigo-600 py-3 font-bold text-white transition-all hover:bg-indigo-500 active:scale-98 disabled:opacity-50 shadow-lg shadow-indigo-600/20"
+              className="w-full rounded-lg bg-indigo-600 py-3 font-bold text-white transition-all hover:bg-indigo-500 active:scale-98 disabled:opacity-50 shadow-lg shadow-indigo-600/20 cursor-pointer"
             >
               {loading ? "Verifying..." : "Verify & Log In"}
             </button>

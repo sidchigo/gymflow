@@ -153,3 +153,4 @@ export function verifyAssertionSignature(params: {
     return false;
   }
 }
+

@@ -24,3 +24,4 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({ ok: true }, { status: 200 });
 }
+

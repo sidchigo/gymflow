@@ -63,6 +63,68 @@ export async function isBiometricsSupported(): Promise<boolean> {
   }
 }
 
+export interface PasskeyPublicKeyOptions {
+  challenge: string;
+  allowCredentials?: Array<{ id: string; type?: string }>;
+  rpId?: string;
+  timeout?: number;
+  userVerification?: UserVerificationRequirement;
+}
+
+/**
+ * Executes navigator.credentials.get with Windows Hello / biometric parameters
+ * matching the Cooper Fitness WebAuthn format.
+ */
+export async function getPasskeyAssertion(options: PasskeyPublicKeyOptions): Promise<{
+  id: string;
+  rawId: string;
+  type: "public-key";
+  response: {
+    authenticatorData: string;
+    clientDataJSON: string;
+    signature: string;
+    userHandle?: string | null;
+  };
+}> {
+  const challengeBuf = base64UrlToBuffer(options.challenge);
+  const allowCredentials = (options.allowCredentials || []).map((c) => ({
+    type: "public-key" as const,
+    id: base64UrlToBuffer(c.id).buffer as ArrayBuffer,
+  }));
+
+  const publicKey: PublicKeyCredentialRequestOptions = {
+    challenge: challengeBuf.buffer as ArrayBuffer,
+    timeout: options.timeout || 60000,
+    rpId: options.rpId || window.location.hostname,
+    userVerification: options.userVerification || "preferred",
+  };
+
+  if (allowCredentials.length > 0) {
+    publicKey.allowCredentials = allowCredentials;
+  }
+
+  const assertion = (await navigator.credentials.get({
+    publicKey,
+  })) as PublicKeyCredential | null;
+
+  if (!assertion) {
+    throw new Error("Passkey authentication was cancelled.");
+  }
+
+  const response = assertion.response as AuthenticatorAssertionResponse;
+  return {
+    id: assertion.id,
+    rawId: bufferToBase64Url(assertion.rawId),
+    type: "public-key",
+    response: {
+      authenticatorData: bufferToBase64Url(response.authenticatorData),
+      clientDataJSON: bufferToBase64Url(response.clientDataJSON),
+      signature: bufferToBase64Url(response.signature),
+      userHandle: response.userHandle ? bufferToBase64Url(response.userHandle) : null,
+    },
+  };
+}
+
 /**
  * Triggers biometric passkey registration on the device for the currently logged-in athlete.
  */

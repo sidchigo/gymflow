@@ -101,3 +101,4 @@ export const WebAuthnLoginVerifyInputSchema = z.object({
 });
 
 export type WebAuthnLoginVerifyInput = z.infer<typeof WebAuthnLoginVerifyInputSchema>;
+
