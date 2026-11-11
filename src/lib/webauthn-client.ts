@@ -126,12 +126,28 @@ export async function getPasskeyAssertion(options: PasskeyPublicKeyOptions): Pro
 }
 
 /**
+ * Detects a human-friendly name for the current device based on browser user agent.
+ */
+export function detectDeviceName(): string {
+  if (typeof window === "undefined") return "Biometric Authenticator";
+  const ua = window.navigator.userAgent.toLowerCase();
+  if (/iphone/.test(ua)) return "iPhone (Face ID / Touch ID)";
+  if (/ipad/.test(ua)) return "iPad (Touch ID / Face ID)";
+  if (/android/.test(ua)) return "Android Phone (Fingerprint)";
+  if (/macintosh|mac os x/.test(ua)) return "Mac (Touch ID)";
+  if (/windows/.test(ua)) return "Windows PC (Windows Hello)";
+  return "Personal Device";
+}
+
+/**
  * Triggers biometric passkey registration on the device for the currently logged-in athlete.
  */
-export async function registerBiometrics(deviceName = "My Device Biometrics"): Promise<{ ok: boolean; message?: string }> {
+export async function registerBiometrics(deviceName?: string): Promise<{ ok: boolean; message?: string }> {
   if (!window.PublicKeyCredential) {
     throw new Error("Biometric authentication is not supported on this browser.");
   }
+
+  const actualDeviceName = deviceName || detectDeviceName();
 
   // 1. Get options from server
   const optRes = await fetch("/api/auth/webauthn/register/options", {
@@ -220,7 +236,7 @@ export async function registerBiometrics(deviceName = "My Device Biometrics"): P
         publicKey: publicKeyBase64,
         publicKeyAlgorithm,
       },
-      deviceName,
+      deviceName: actualDeviceName,
     }),
   });
 
@@ -231,6 +247,7 @@ export async function registerBiometrics(deviceName = "My Device Biometrics"): P
 
   if (typeof window !== "undefined") {
     localStorage.setItem("gymflow_biometrics_enrolled", "true");
+    localStorage.setItem("gymflow_device_credential_id", credential.id);
   }
 
   return { ok: true, message: "Biometrics successfully registered." };

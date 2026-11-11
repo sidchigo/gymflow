@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Save, Clock, LogOut, User, Apple, Swords, Calendar, Dumbbell, Smartphone, Download, Fingerprint, ShieldCheck } from "lucide-react";
-import { isBiometricsSupported, registerBiometrics } from "@/lib/webauthn-client";
+import { Save, Clock, LogOut, User, Apple, Swords, Calendar, Dumbbell, Smartphone, Download, Fingerprint, ShieldCheck, Trash2 } from "lucide-react";
+import { isBiometricsSupported, registerBiometrics, detectDeviceName } from "@/lib/webauthn-client";
 import {
   type AthleteProfile,
   type Modality,
@@ -136,9 +136,10 @@ export default function ProfileSettingsScreen({
   const [isIOS, setIsIOS] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
 
-  // Biometrics (WebAuthn / Passkeys)
+  // Biometrics & Multi-Device Passkeys
   const [biometricsSupported, setBiometricsSupported] = useState(false);
-  const [biometricsEnrolled, setBiometricsEnrolled] = useState(false);
+  const [enrolledDevices, setEnrolledDevices] = useState<Array<{ id: string; createdAt: string; deviceName: string }>>([]);
+  const [isCurrentDeviceEnrolled, setIsCurrentDeviceEnrolled] = useState(false);
   const [biometricsLoading, setBiometricsLoading] = useState(false);
   const [biometricsStatusMsg, setBiometricsStatusMsg] = useState<string | null>(null);
 
@@ -150,9 +151,21 @@ export default function ProfileSettingsScreen({
 
     void fetch("/api/auth/webauthn/status")
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { enrolled?: boolean } | null) => {
-        if (isMounted && data) {
-          setBiometricsEnrolled(Boolean(data.enrolled));
+      .then((data: { enrolled?: boolean; passkeys?: Array<{ id: string; createdAt: string; deviceName?: string }> } | null) => {
+        if (isMounted && data && Array.isArray(data.passkeys)) {
+          const devices = data.passkeys.map((p) => ({
+            id: p.id,
+            createdAt: p.createdAt,
+            deviceName: p.deviceName || "Biometric Authenticator",
+          }));
+          setEnrolledDevices(devices);
+
+          const localId = typeof window !== "undefined" ? localStorage.getItem("gymflow_device_credential_id") : null;
+          if (localId && devices.some((d) => d.id === localId)) {
+            setIsCurrentDeviceEnrolled(true);
+          } else {
+            setIsCurrentDeviceEnrolled(false);
+          }
         }
       })
       .catch(() => {});
@@ -166,9 +179,24 @@ export default function ProfileSettingsScreen({
     setBiometricsLoading(true);
     setBiometricsStatusMsg(null);
     try {
-      await registerBiometrics();
-      setBiometricsEnrolled(true);
-      setBiometricsStatusMsg("Biometrics registered successfully!");
+      const devName = detectDeviceName();
+      await registerBiometrics(devName);
+      setIsCurrentDeviceEnrolled(true);
+
+      const res = await fetch("/api/auth/webauthn/status");
+      if (res.ok) {
+        const data = (await res.json()) as { passkeys?: Array<{ id: string; createdAt: string; deviceName?: string }> };
+        if (data.passkeys) {
+          setEnrolledDevices(
+            data.passkeys.map((p) => ({
+              id: p.id,
+              createdAt: p.createdAt,
+              deviceName: p.deviceName || "Biometric Authenticator",
+            }))
+          );
+        }
+      }
+      setBiometricsStatusMsg(`${devName} registered successfully!`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to register biometrics";
       setBiometricsStatusMsg(msg);
@@ -177,22 +205,28 @@ export default function ProfileSettingsScreen({
     }
   };
 
-  const handleRemoveBiometrics = async () => {
+  const handleRemoveDevice = async (credentialId?: string) => {
     setBiometricsLoading(true);
     setBiometricsStatusMsg(null);
     try {
-      const res = await fetch("/api/auth/webauthn/credentials", { method: "DELETE" });
+      const url = credentialId ? `/api/auth/webauthn/credentials?id=${encodeURIComponent(credentialId)}` : "/api/auth/webauthn/credentials";
+      const res = await fetch(url, { method: "DELETE" });
       if (res.ok) {
-        setBiometricsEnrolled(false);
+        setEnrolledDevices((prev) => (credentialId ? prev.filter((d) => d.id !== credentialId) : []));
         if (typeof window !== "undefined") {
-          localStorage.removeItem("gymflow_biometrics_enrolled");
+          const currentLocalId = localStorage.getItem("gymflow_device_credential_id");
+          if (!credentialId || credentialId === currentLocalId) {
+            localStorage.removeItem("gymflow_device_credential_id");
+            localStorage.removeItem("gymflow_biometrics_enrolled");
+            setIsCurrentDeviceEnrolled(false);
+          }
         }
-        setBiometricsStatusMsg("Biometrics removed.");
+        setBiometricsStatusMsg("Device removed.");
       } else {
-        throw new Error("Failed to remove credentials");
+        throw new Error("Failed to remove credential");
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to remove biometrics";
+      const msg = err instanceof Error ? err.message : "Failed to remove device";
       setBiometricsStatusMsg(msg);
     } finally {
       setBiometricsLoading(false);
@@ -773,49 +807,77 @@ export default function ProfileSettingsScreen({
               </div>
             </section>
 
-            {/* ── Security & Biometrics ─────────────────────────────── */}
+            {/* ── Security & Biometric Devices ─────────────────────────────── */}
             <section className="rounded-xl border border-zinc-900 bg-zinc-950/40 p-3.5 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <Fingerprint size={12} strokeWidth={2.5} className="text-zinc-550" />
                   <span className="font-mono text-[9px] uppercase tracking-wider text-zinc-500 font-bold">
-                    Security & Biometric Access
+                    Biometric Devices & Passkeys
                   </span>
                 </div>
-                {biometricsEnrolled ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 text-[9px] font-mono font-bold text-emerald-400">
-                    <ShieldCheck size={10} strokeWidth={2.5} />
-                    Active
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center rounded-full bg-zinc-900 border border-zinc-800 px-2 py-0.5 text-[9px] font-mono font-medium text-zinc-500">
-                    Not Enrolled
-                  </span>
-                )}
+                <span className="inline-flex items-center gap-1 rounded-full bg-zinc-900 border border-zinc-800 px-2 py-0.5 text-[9px] font-mono font-medium text-zinc-400">
+                  {enrolledDevices.length} {enrolledDevices.length === 1 ? "device" : "devices"}
+                </span>
               </div>
 
               <p className="text-[11px] leading-relaxed text-zinc-400">
-                Log into GymFlow with 1-click Face ID, Touch ID, or Windows Hello on this device without waiting for email OTP codes.
+                Unlock GymFlow with Windows Hello on PC, or Face ID / Fingerprint on your phone. You can register each device independently.
               </p>
 
+              {/* List of enrolled devices */}
+              {enrolledDevices.length > 0 && (
+                <div className="space-y-2 pt-1">
+                  {enrolledDevices.map((dev) => {
+                    const isCurrent = typeof window !== "undefined" && localStorage.getItem("gymflow_device_credential_id") === dev.id;
+                    const isPhone = dev.deviceName.toLowerCase().includes("phone") || dev.deviceName.toLowerCase().includes("android") || dev.deviceName.toLowerCase().includes("iphone");
+                    return (
+                      <div
+                        key={dev.id}
+                        className="flex items-center justify-between rounded-lg border border-zinc-900 bg-zinc-950/80 px-3 py-2 text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">
+                            {isPhone ? "📱" : "💻"}
+                          </span>
+                          <div>
+                            <div className="flex items-center gap-1.5 font-semibold text-zinc-200 text-[11px]">
+                              {dev.deviceName}
+                              {isCurrent && (
+                                <span className="text-[8px] font-mono text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 rounded px-1">
+                                  This Device
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[9px] font-mono text-zinc-500">
+                              Added {new Date(dev.createdAt).toLocaleDateString()}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDevice(dev.id)}
+                          disabled={biometricsLoading}
+                          className="text-zinc-500 hover:text-red-400 p-1.5 transition-colors cursor-pointer"
+                          title="Remove this device"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {biometricsStatusMsg && (
-                <div className={`p-2.5 rounded-lg text-xs font-mono ${biometricsEnrolled ? "bg-emerald-950/40 border border-emerald-500/30 text-emerald-300" : "bg-zinc-900 text-zinc-300 border border-zinc-800"}`}>
+                <div className="p-2.5 rounded-lg text-xs font-mono bg-zinc-900 text-zinc-300 border border-zinc-800">
                   {biometricsStatusMsg}
                 </div>
               )}
 
               <div className="pt-1">
-                {biometricsEnrolled ? (
-                  <button
-                    type="button"
-                    onClick={handleRemoveBiometrics}
-                    disabled={biometricsLoading}
-                    className="w-full flex items-center justify-center gap-2 rounded-lg border border-red-900/40 bg-red-950/20 hover:bg-red-950/40 py-2.5 px-3 text-xs font-semibold text-red-300 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <Fingerprint size={14} />
-                    {biometricsLoading ? "Removing..." : "Remove Biometric Passkey"}
-                  </button>
-                ) : (
+                {!isCurrentDeviceEnrolled ? (
                   <button
                     type="button"
                     onClick={handleRegisterBiometrics}
@@ -823,8 +885,25 @@ export default function ProfileSettingsScreen({
                     className="w-full flex items-center justify-center gap-2 rounded-lg border border-indigo-500/40 bg-indigo-950/30 hover:bg-indigo-900/40 py-2.5 px-3 text-xs font-semibold text-indigo-200 transition-all cursor-pointer disabled:opacity-50"
                   >
                     <Fingerprint size={14} />
-                    {biometricsLoading ? "Enrolling Biometrics..." : biometricsSupported ? "Enable Face ID / Touch ID" : "Biometrics Unsupported on this Device"}
+                    {biometricsLoading ? "Registering..." : biometricsSupported ? `+ Add This Device (${detectDeviceName()})` : "Biometrics Unsupported on this Device"}
                   </button>
+                ) : (
+                  <div className="flex items-center justify-between rounded-lg border border-emerald-950/40 bg-emerald-950/20 px-3 py-2 text-xs">
+                    <span className="text-[10px] font-mono text-emerald-400 flex items-center gap-1.5">
+                      <ShieldCheck size={12} /> This device is enrolled and active
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const localId = typeof window !== "undefined" ? localStorage.getItem("gymflow_device_credential_id") : null;
+                        handleRemoveDevice(localId || undefined);
+                      }}
+                      disabled={biometricsLoading}
+                      className="text-[10px] font-mono text-red-400/80 hover:text-red-400 underline cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 )}
               </div>
             </section>
