@@ -303,6 +303,9 @@ async function handleRawJSONFallback(
         };
 
         cleanText = cleanText.replace(match[0], "").trim();
+        if (!cleanText && parsed.reasoning) {
+          cleanText = parsed.reasoning;
+        }
         break;
       }
     } catch {
@@ -339,9 +342,7 @@ async function handleRawJSONFallback(
       }),
     });
 
-    if (interceptedPlan.reasoning && !cleanText) {
-      cleanText = interceptedPlan.reasoning;
-    } else if (!cleanText) {
+    if (!cleanText) {
       let scheduleSummary = `📅 **Updated 7-Day Athletic Plan (${interceptedPlan.plan[0]?.date || ""} – ${interceptedPlan.plan[interceptedPlan.plan.length - 1]?.date || ""})**\n\n`;
       for (const day of interceptedPlan.plan) {
         const icon = day.modality === "REST" ? "🛌" : day.modality === "KICKBOXING" || day.modality === "BJJ" ? "🥊" : "🏋️‍♂️";

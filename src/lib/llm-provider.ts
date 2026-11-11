@@ -81,6 +81,13 @@ export interface LLMProvider {
 // 2. Gemini Implementation
 // ---------------------------------------------------------------------------
 
+function sanitizeGeminiModel(name?: string): string {
+  if (!name || name.includes("/") || (!name.startsWith("gemini") && !name.startsWith("gemma"))) {
+    return "gemini-2.5-flash";
+  }
+  return name;
+}
+
 export class GeminiLLMProvider implements LLMProvider {
   private ai: GoogleGenAI;
   private defaultModel: string;
@@ -94,10 +101,11 @@ export class GeminiLLMProvider implements LLMProvider {
       genaiOptions.apiKey = apiKey;
     }
     this.ai = new GoogleGenAI(genaiOptions);
-    this.defaultModel =
+    this.defaultModel = sanitizeGeminiModel(
       options?.defaultModel ||
       process.env.LLM_MODEL ||
-      "gemini-2.5-flash";
+      "gemini-2.5-flash"
+    );
   }
 
   async generateCompletion(params: {
@@ -109,7 +117,7 @@ export class GeminiLLMProvider implements LLMProvider {
     toolChoice?: any | undefined;
     response_format?: any | undefined;
   }): Promise<LLMResponse> {
-    const modelName = params.model || this.defaultModel;
+    const modelName = sanitizeGeminiModel(params.model || this.defaultModel);
 
     // 1. Extract system instruction
     const systemMessage = params.messages.find((m) => m.role === "system");
@@ -174,6 +182,22 @@ export class GeminiLLMProvider implements LLMProvider {
     }
     if (configTools) {
       configObj.tools = configTools;
+      if (params.toolChoice) {
+        if (typeof params.toolChoice === "object" && params.toolChoice?.function?.name) {
+          configObj.toolConfig = {
+            functionCallingConfig: {
+              mode: "ANY",
+              allowedFunctionNames: [params.toolChoice.function.name],
+            },
+          };
+        } else if (params.toolChoice === "required" || params.toolChoice === "any") {
+          configObj.toolConfig = {
+            functionCallingConfig: {
+              mode: "ANY",
+            },
+          };
+        }
+      }
     }
     if (params.temperature !== undefined) {
       configObj.temperature = params.temperature;
@@ -221,7 +245,7 @@ export class GeminiLLMProvider implements LLMProvider {
     text?: string | undefined;
     toolCalls?: Array<{ id?: string; name: string; args: Record<string, unknown> }> | undefined;
   }> {
-    const modelName = params.model || this.defaultModel;
+    const modelName = sanitizeGeminiModel(params.model || this.defaultModel);
 
     const systemMessage = params.messages.find((m) => m.role === "system");
     const systemInstruction = systemMessage?.parts
@@ -280,6 +304,22 @@ export class GeminiLLMProvider implements LLMProvider {
     }
     if (configTools) {
       configObj.tools = configTools;
+      if (params.toolChoice) {
+        if (typeof params.toolChoice === "object" && params.toolChoice?.function?.name) {
+          configObj.toolConfig = {
+            functionCallingConfig: {
+              mode: "ANY",
+              allowedFunctionNames: [params.toolChoice.function.name],
+            },
+          };
+        } else if (params.toolChoice === "required" || params.toolChoice === "any") {
+          configObj.toolConfig = {
+            functionCallingConfig: {
+              mode: "ANY",
+            },
+          };
+        }
+      }
     }
     if (params.temperature !== undefined) {
       configObj.temperature = params.temperature;
