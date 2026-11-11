@@ -78,3 +78,4 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   return NextResponse.json({ ok: true, message: "Passkey registered successfully." }, { status: 200 });
 }
+
